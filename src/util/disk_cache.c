@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#ifdef ENABLE_SHADER_CACHE
+#if defined(ENABLE_SHADER_CACHE) && !defined(__WUT__)
 
 #include <ctype.h>
 #include <ftw.h>

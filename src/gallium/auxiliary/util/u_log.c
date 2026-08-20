@@ -129,8 +129,9 @@ u_log_printf(struct u_log_context *ctx, const char *fmt, ...)
    va_list va;
    char *str = NULL;
 
+   assert(false);
    va_start(va, fmt);
-   int ret = vasprintf(&str, fmt, va);
+   int ret = 0;//vasprintf(&str, fmt, va);
    va_end(va);
 
    if (ret >= 0) {

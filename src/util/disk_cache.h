@@ -133,7 +133,7 @@ disk_cache_get_function_identifier(void *ptr, blake3_hasher *ctx)
 
 /* Provide inlined stub functions if the shader cache is disabled. */
 
-#ifdef ENABLE_SHADER_CACHE
+#if defined(ENABLE_SHADER_CACHE) && !defined(__WUT__)
 
 /**
  * Create a new cache object.

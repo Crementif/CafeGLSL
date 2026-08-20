@@ -9,7 +9,7 @@
 
 #include "detect_os.h"
 
-#if DETECT_OS_WINDOWS == 0
+#if DETECT_OS_WINDOWS == 0 && !defined(__WUT__)
 
 #include <fcntl.h>
 #include <stddef.h>

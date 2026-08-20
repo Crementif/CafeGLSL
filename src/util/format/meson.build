@@ -10,11 +10,16 @@ files_mesa_format = files(
   'u_format_other.c',
   'u_format_rgtc.c',
   'u_format_s3tc.c',
-  'u_format_tests.c',
   'u_format_unpack_neon.c',
   'u_format_yuv.c',
   'u_format_zs.c',
 )
+
+# u_format_tests.c only holds test data and all of its consumers are tests, but at ~3.0 MB it
+# is the largest object in libmesa_util. Keep it out of the library we ship.
+if with_tests
+  files_mesa_format += files('u_format_tests.c')
+endif
 
 u_format_gen_h = custom_target(
   'u_format_gen.h',

@@ -42,6 +42,25 @@
 
 #if DETECT_OS_POSIX
 #  include <sys/mman.h>
+#elif defined(__WUT__)
+// CafeOS
+static inline int munmap(void *addr, size_t length)
+{
+	assert(false);
+	return 0;
+}
+
+static inline void *mmap(void *addr, size_t lengthint, int flags , int fd, off_t offset)
+{
+	assert(false);
+	return NULL;
+}
+
+static inline void *mmap64(void *addr, size_t length, int flags , int fd, off_t offset)
+{
+	assert(false);
+	return NULL;
+}
 #else
 #  error Unsupported OS
 #endif

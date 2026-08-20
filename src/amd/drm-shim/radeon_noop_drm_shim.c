@@ -6,7 +6,7 @@
 #include "util/log.h"
 #include "util/os_misc.h"
 #include <util/u_math.h>
-#include <radeon_drm.h>
+//#include <radeon_drm.h>
 
 static enum radeon_family radeon_family = CHIP_RV515;
 static uint16_t device_id = 0x7140;

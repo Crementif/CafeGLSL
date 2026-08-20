@@ -10,7 +10,26 @@
 
 #include "radeon_drm_winsys.h"
 #include "util/u_thread.h"
-#include "util/pb_slab.h"
+#if defined(__WUT__)
+
+// since we dont link libdrm, here are some necessary types from radeon_drm.h
+typedef uint32_t __u32;
+typedef uint64_t __u64;
+
+struct drm_radeon_cs_chunk {
+	__u32		chunk_id;
+	__u32		length_dw;
+	__u64		chunk_data;
+};
+
+struct drm_radeon_cs_reloc {
+	__u32		handle;
+	__u32		read_domains;
+	__u32		write_domain;
+	__u32		flags;
+};
+
+#endif
 
 struct radeon_bo {
    struct pb_buffer_lean base;

@@ -27,7 +27,7 @@
 #include "util/hash_table.h"
 #include "util/vma.h"
 
-#include <xf86drm.h>
+//#include <xf86drm.h>
 
 #ifdef __linux__
 #define DRM_MAJOR 226
@@ -107,7 +107,7 @@ void drm_shim_fd_unregister(int fd);
 struct shim_fd *drm_shim_fd_lookup(int fd);
 int drm_shim_ioctl(int fd, unsigned long request, void *arg);
 void *drm_shim_mmap(struct shim_fd *shim_fd, size_t length, int prot, int flags,
-                    int fd, off64_t offset);
+                    int fd, _off64_t offset);
 
 int drm_shim_bo_init(struct shim_bo *bo, size_t size);
 void drm_shim_bo_get(struct shim_bo *bo);

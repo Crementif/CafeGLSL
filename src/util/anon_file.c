@@ -31,6 +31,8 @@
 #include "anon_file.h"
 #include "detect_os.h"
 
+#ifndef __WUT__
+
 #ifndef _WIN32
 
 #include <unistd.h>
@@ -261,4 +263,6 @@ os_create_anonymous_file(int64_t size, const char *debug_name)
       PAGE_READWRITE, (size >> 32), size & 0xFFFFFFFF, NULL);
    return _open_osfhandle((intptr_t)h, 0);
 }
+#endif
+
 #endif

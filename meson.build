@@ -38,6 +38,7 @@ fs = import('fs')
 sizeof_pointer = cc.sizeof('void*').to_string()
 
 null_dep = dependency('', required : false)
+mode_cafecompiler = true
 
 if get_option('layout') != 'mirror'
   error('`mirror` is the only build directory layout supported')
@@ -92,6 +93,21 @@ pre_args = [
   '-D__STDC_LIMIT_MACROS',
   '-DPACKAGE_VERSION="@0@"'.format(project_version),
 ]
+
+# some defines necessary for compiling for CafeOS (Wii U)
+if host_machine.system() == 'cafeos'
+pre_args += [
+  '-D_POSIX_C_SOURCE=201112L',
+  '-D_POSIX_BARRIERS',
+  '-DUTIL_ARCH_BIG_ENDIAN=1', # auto-detection fails so we set these manually
+  '-DUTIL_ARCH_LITTLE_ENDIAN=0',
+  '-D_POSIX_TIMEOUTS',
+  '-DLLONG_MAX=9223372036854775807LL',
+  # dont use TLS
+  '-Dthread_local='
+]
+endif
+
 # Arguments for c or cpp compiler, can be compiler options
 c_cpp_args = []
 
@@ -284,7 +300,7 @@ if _vulkan_drivers.contains('auto')
       error('Unknown architecture @0@. Please pass -Dvulkan-drivers to set driver options. Patches gladly accepted to fix this.'.format(
             host_machine.cpu_family()))
     endif
-  elif ['darwin', 'windows', 'cygwin', 'haiku'].contains(host_machine.system())
+  elif ['darwin', 'windows', 'cygwin', 'haiku', 'cafeos'].contains(host_machine.system())
     # No vulkan driver supports windows or macOS currently
     _vulkan_drivers = []
   else
@@ -480,6 +496,8 @@ if _platforms.contains('auto')
     _platforms = ['haiku']
   elif host_machine.system() == 'windows'
     _platforms = ['windows']
+  elif host_machine.system() == 'cafeos'
+    _platforms = []
   elif host_machine.system() == 'darwin'
     _platforms = ['x11', 'macos']
   else
@@ -1651,7 +1669,11 @@ if cc.compiles('''#include <stdint.h>
                               (int)__atomic_add_fetch(x.v, (uint64_t)1, __ATOMIC_ACQ_REL);
                      }''',
                   name : 'GCC atomic builtins required -latomic')
-    dep_atomic = cc.find_library('atomic')
+    if host_machine.system() == 'cafeos'
+      dep_atomic = null_dep
+    else
+      dep_atomic = cc.find_library('atomic')
+    endif
   endif
 endif
 if not cc.links('''#include <stdint.h>
@@ -1840,7 +1862,7 @@ ld_args_build_id = cc.get_supported_link_arguments('-Wl,--build-id=sha1')
 
 # check for dl support
 dep_dl = null_dep
-if host_machine.system() != 'windows'
+if host_machine.system() != 'windows' and host_machine.system() != 'cafeos'
   if not cc.has_function('dlopen')
     dep_dl = cc.find_library('dl', required : true)
   endif

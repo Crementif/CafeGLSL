@@ -62,6 +62,8 @@
 #elif defined(__OpenBSD__)
 #include <sys/types.h>
 #define CPU_TO_LE32( x ) htole32( x )
+#elif defined(__WUT__)
+#define CPU_TO_LE32( x ) __builtin_bswap32( x )
 #else /*__linux__ */
 #include <sys/endian.h>
 #define CPU_TO_LE32( x ) bswap32( x )

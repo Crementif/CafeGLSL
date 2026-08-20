@@ -81,7 +81,7 @@ disk_cache_get_function_identifier(void *ptr, blake3_hasher *ctx)
 
 #ifdef ENABLE_SHADER_CACHE
 
-#if DETECT_OS_WINDOWS
+#if DETECT_OS_WINDOWS || defined(__WUT__)
 /* TODO: implement disk cache support on windows */
 
 #else

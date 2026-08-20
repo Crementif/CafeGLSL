@@ -26,22 +26,25 @@
  *
  **************************************************************************/
 
+#include "c11/threads.h"
 #include "util/u_atomic.h"
 #include "util/u_debug.h"
-#include "util/u_string.h"
 #include "util/u_math.h"
-#include "c11/threads.h"
-#include <inttypes.h>
+#include "util/u_string.h"
 
-#include <stdio.h>
-#include <limits.h> /* CHAR_BIT */
 #include <ctype.h> /* isalnum */
+#include <inttypes.h>
+#include <limits.h> /* CHAR_BIT */
+#include <stdio.h>
 
-#ifdef _WIN32
-#include <windows.h>
-#include <stdlib.h>
+#if defined(__WUT__)
+#include <strings.h>
 #endif
 
+#ifdef _WIN32
+#include <stdlib.h>
+#include <windows.h>
+#endif
 
 void
 _debug_vprintf(const char *format, va_list ap)

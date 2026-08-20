@@ -29,6 +29,7 @@
 #ifndef U_DL_H_
 #define U_DL_H_
 
+#if !defined(__WUT__)
 
 #include "detect_os.h"
 
@@ -89,6 +90,8 @@ util_dl_error(void);
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif
 
 #endif /* U_DL_H_ */

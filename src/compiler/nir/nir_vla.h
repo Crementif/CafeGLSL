@@ -28,6 +28,8 @@
 #ifndef NIR_VLA_H
 #define NIR_VLA_H
 
+#include <string.h>
+
 #include "c99_alloca.h"
 
 /* Declare a variable length array, with no initialization */

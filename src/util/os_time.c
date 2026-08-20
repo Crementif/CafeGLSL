@@ -46,6 +46,9 @@
 #  include <sys/time.h> /* timeval */
 #  include <sched.h> /* sched_yield */
 #  include <errno.h>
+#elif defined(__WUT__)
+#  include <time.h>
+#  include <unistd.h>
 #elif DETECT_OS_WINDOWS
 #  include <windows.h>
 #else
@@ -56,9 +59,15 @@
 int64_t
 os_time_get_nano(void)
 {
+#if defined(__WUT__)
+   struct timespec tv;
+   clock_gettime(CLOCK_MONOTONIC, &tv);
+   return tv.tv_nsec + tv.tv_sec*INT64_C(1000000000);
+#else
    struct timespec ts;
    timespec_get(&ts, TIME_MONOTONIC);
    return ts.tv_nsec + ts.tv_sec*INT64_C(1000000000);
+#endif
 }
 
 void
@@ -85,6 +94,14 @@ os_time_sleep(int64_t usecs)
    time.tv_sec = usecs / 1000000;
    time.tv_nsec = (usecs % 1000000) * 1000;
    while (clock_nanosleep(CLOCK_MONOTONIC, 0, &time, &time) == EINTR);
+
+#elif defined(__WUT__)
+   {
+      struct timespec ts;
+      ts.tv_sec = usecs / 1000000;
+      ts.tv_nsec = (usecs % 1000000) * 1000;
+      nanosleep(&ts, NULL);
+   }
 
 #elif DETECT_OS_POSIX
    usleep(usecs);

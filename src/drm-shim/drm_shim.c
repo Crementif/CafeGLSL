@@ -39,7 +39,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+
+#if !defined(__WUT__)
 #include <sys/mman.h>
+#endif
+
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <stdarg.h>

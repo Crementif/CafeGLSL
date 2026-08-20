@@ -24,7 +24,19 @@
 #include "util/float8.h"
 #include "util/stack_array.h"
 
+#include <ctype.h>
 #include <stdio.h>
+
+#ifdef __WUT__
+static int strcasecmp(const char *s1, const char *s2) {
+   while (*s1 && *s2) {
+      int d = tolower((unsigned char)*s1) - tolower((unsigned char)*s2);
+      if (d != 0) return d;
+      s1++; s2++;
+   }
+   return tolower((unsigned char)*s1) - tolower((unsigned char)*s2);
+}
+#endif
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096

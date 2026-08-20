@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: MIT
  */
 
+#ifndef __WUT__
+
 #include <sys/stat.h>
 
 #include "detect_os.h"
@@ -216,3 +218,5 @@ mesa_cache_db_multipart_entry_remove(struct mesa_cache_db_multipart *db,
       mesa_cache_db_entry_remove(db->parts[i], cache_key_160bit);
    }
 }
+
+#endif /* !__WUT__ */

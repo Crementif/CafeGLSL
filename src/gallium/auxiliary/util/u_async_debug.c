@@ -40,7 +40,8 @@ u_async_debug_message(void *data, unsigned *id, enum util_debug_type type,
    char *text;
    int r;
 
-   r = vasprintf(&text, fmt, args);
+	assert(false);
+   r = 0;//vasprintf(&text, fmt, args);
    if (r < 0)
       return;
 

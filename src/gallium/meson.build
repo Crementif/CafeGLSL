@@ -77,7 +77,11 @@ else
   driver_asahi = declare_dependency()
 endif
 if with_gallium_r300 or with_gallium_radeonsi or with_gallium_r600
-  subdir('winsys/radeon/drm')
+  if mode_cafecompiler
+    subdir('winsys/radeon/drmstub')
+  else
+    subdir('winsys/radeon/drm')
+  endif
 endif
 if with_gallium_r300
   subdir('drivers/r300')

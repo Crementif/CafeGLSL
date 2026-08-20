@@ -1,0 +1,24 @@
+[binaries]
+c = '/opt/devkitpro/devkitPPC/bin/powerpc-eabi-gcc'
+cpp = '/opt/devkitpro/devkitPPC/bin/powerpc-eabi-g++'
+ar = '/opt/devkitpro/devkitPPC/bin/powerpc-eabi-gcc-ar'
+strip = '/opt/devkitpro/devkitPPC/bin/powerpc-eabi-strip'
+pkg-config = '/opt/devkitpro/devkitPPC/bin/powerpc-eabi-pkg-config'
+
+[built-in options]
+c_args = ['-DESPRESSO', '-D__WIIU__', '-D__WUT__', '-I/opt/devkitpro/portlibs/wiiu/include', '-I/opt/devkitpro/portlibs/ppc/include', '-I/opt/devkitpro/wut/include', '-mcpu=750', '-meabi', '-mhard-float', '-ffunction-sections', '-fdata-sections', '-fno-pic', '-fno-pie']
+c_link_args = ['-L/opt/devkitpro/wut/lib', '-L/opt/devkitpro/portlibs/wiiu/lib', '-L/opt/devkitpro/portlibs/ppc/lib', '-specs=/opt/devkitpro/wut/share/wut.specs', '-lwut', '-lm']
+cpp_args = ['-DESPRESSO', '-D__WIIU__', '-D__WUT__', '-I/opt/devkitpro/portlibs/wiiu/include', '-I/opt/devkitpro/portlibs/ppc/include', '-I/opt/devkitpro/wut/include', '-mcpu=750', '-meabi', '-mhard-float', '-ffunction-sections', '-fdata-sections', '-fno-pic', '-fno-pie']
+cpp_link_args = ['-L/opt/devkitpro/wut/lib', '-L/opt/devkitpro/portlibs/wiiu/lib', '-L/opt/devkitpro/portlibs/ppc/lib', '-specs=/opt/devkitpro/wut/share/wut.specs', '-lwut', '-lm']
+
+[host_machine]
+system = 'cafeos'
+cpu_family = 'ppc'
+cpu = 'ppc750'
+endian = 'big'
+
+[target_machine]
+system = 'cafeos'
+cpu_family = 'ppc'
+cpu = 'ppc750'
+endian = 'big'

@@ -21,10 +21,12 @@
  * IN THE SOFTWARE.
  */
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include "c11/threads.h"
 #include "util/detect_os.h"
 #include "util/log.h"
@@ -142,7 +144,7 @@ mesa_log_init_once(void)
 
    mesa_log_file = stderr;
 
-#if !DETECT_OS_WINDOWS
+#if !DETECT_OS_WINDOWS && !defined(__WUT__)
    if (__normal_user()) {
       FILE *fp = NULL;
 
@@ -429,6 +431,47 @@ mesa_log_get_file(void)
    mesa_log_init();
    return mesa_log_file;
 }
+
+#if defined(__WUT__)
+__attribute__((weak)) void flockfile(FILE *filehandle)
+{
+
+}
+
+__attribute__((weak)) void funlockfile(FILE *filehandle)
+{
+
+}
+
+__attribute__((weak)) void __atomic_store_8(volatile void *ptr, uint64_t val, int memorder)
+{
+   (void)memorder;
+   *(volatile uint64_t *)ptr = val;
+}
+
+__attribute__((weak)) uint64_t __atomic_load_8(const volatile void *ptr, int memorder)
+{
+   (void)memorder;
+   return *(const volatile uint64_t *)ptr;
+}
+
+__attribute__((weak)) int posix_memalign(void **memptr, size_t alignment, size_t size)
+{
+   if (alignment % sizeof(void *) != 0 || (alignment & (alignment - 1)) != 0)
+   {
+      return EINVAL;
+   }
+
+   void *ptr = aligned_alloc(alignment, size);
+   if (ptr == NULL)
+   {
+      return ENOMEM;
+   }
+
+   *memptr = ptr;
+   return 0;
+}
+#endif
 
 void
 mesa_log(enum mesa_log_level level, const char *tag, const char *format, ...)

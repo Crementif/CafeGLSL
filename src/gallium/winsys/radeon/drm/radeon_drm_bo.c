@@ -15,7 +15,10 @@
 #include "frontend/drm_driver.h"
 
 #include <sys/ioctl.h>
+
+#if !defined(__WUT__)
 #include <xf86drm.h>
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>

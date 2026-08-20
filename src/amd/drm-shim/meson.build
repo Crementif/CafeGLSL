@@ -1,7 +1,7 @@
 # Copyright © 2021 Emma Anholt
 # SPDX-License-Identifier: MIT
 
-libradeon_noop_drm_shim = shared_library(
+libradeon_noop_drm_shim = static_library(
   'radeon_noop_drm_shim',
   'radeon_noop_drm_shim.c',
   include_directories: [inc_include, inc_src, inc_amd],

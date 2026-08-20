@@ -45,6 +45,9 @@
 void
 dd_get_debug_filename_and_mkdir(char *buf, size_t buflen, bool verbose)
 {
+#if defined(__WUT__)
+   assert(false);
+#else
    static unsigned index;
    char dir[256];
    const char *proc_name = util_get_process_name();
@@ -64,6 +67,7 @@ dd_get_debug_filename_and_mkdir(char *buf, size_t buflen, bool verbose)
 
    if (verbose)
       fprintf(stderr, "dd: dumping to file %s\n", buf);
+#endif
 }
 
 FILE *
