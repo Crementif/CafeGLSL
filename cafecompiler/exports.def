@@ -1,0 +1,10 @@
+:NAME glslcompiler
+
+:TEXT
+InitGLSLCompiler
+DestroyGLSLCompiler
+GetGLSLCompilerVersion
+CompileVertexShader
+CompilePixelShader
+FreeVertexShader
+FreePixelShader

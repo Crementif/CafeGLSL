@@ -377,7 +377,7 @@ st_glsl_to_nir_post_opts(struct st_context *st, struct gl_program *prog,
          screen->finalize_nir(screen, nir, false);
    }
 
-   if (st->ctx->_Shader->Flags & GLSL_DUMP) {
+   if (st->ctx->_Shader && st->ctx->_Shader->Flags & GLSL_DUMP) {
       _mesa_log("\n");
       _mesa_log("NIR IR for linked %s program %d:\n",
              _mesa_shader_stage_to_string(prog->info.stage),
@@ -551,8 +551,10 @@ st_link_glsl_to_nir(struct gl_context *ctx,
        * constants in GLSL. */
       NIR_PASS(_, nir, gl_nir_lower_buffers, shader_program);
 
+#if !defined(CAFE_COMPILER)
       NIR_PASS(_, nir, st_nir_lower_wpos_ytransform, shader->Program,
                st->screen);
+#endif
 
       /* needed to lower base_workgroup_id and base_global_invocation_id */
       struct nir_lower_compute_system_values_options cs_options = {};
@@ -828,7 +830,7 @@ st_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
    if (prog->data->LinkStatus == LINKING_SKIPPED)
       return;
 
-   if (ctx->_Shader->Flags & GLSL_DUMP) {
+   if (ctx->_Shader && ctx->_Shader->Flags & GLSL_DUMP) {
       if (!prog->data->LinkStatus) {
 	 fprintf(stderr, "GLSL shader program %d failed to link\n", prog->Name);
       }

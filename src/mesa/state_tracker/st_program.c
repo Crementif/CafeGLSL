@@ -285,6 +285,8 @@ static void
 st_unbind_program(struct st_context *st, struct gl_program *p)
 {
    struct gl_context *ctx = st->ctx;
+   if(!ctx || !st->cso_context)
+      return;
 
    /* Unbind the shader in cso_context and re-bind in st/mesa. */
    switch (p->info.stage) {

@@ -170,7 +170,10 @@ lower_deref(nir_builder *b, struct lower_samplers_as_deref_state *state,
 
    remove_struct_derefs_prep(path.path, &name, &location, &type);
 
-   if (state->shader_program && var->data.how_declared != nir_var_hidden) {
+   /* Cafe assigns every sampler an explicit binding before this pass runs, and
+    * the standalone context has no uniform storage to look one up in.
+    */
+   if (!var->data.explicit_binding && state->shader_program && var->data.how_declared != nir_var_hidden) {
       /* For GLSL programs, look up the bindings in the uniform storage. */
       assert(location < state->shader_program->data->NumUniformStorage &&
              state->shader_program->data->UniformStorage[location].opaque[stage].active);

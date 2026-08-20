@@ -2568,6 +2568,7 @@ endif
 subdir('include')
 subdir('bin')
 subdir('src')
+subdir('cafecompiler')
 
 meson.add_devenv(devenv)
 

@@ -13,6 +13,7 @@ subdir('util')
 
 inc_mesa = include_directories('mesa')
 inc_src = include_directories('.')
+inc_mapi = include_directories('mesa/glapi')
 inc_gallium = include_directories('gallium/include')
 inc_gallium_aux = include_directories('gallium/auxiliary')
 inc_amd_common = include_directories('amd/common', 'amd/common/nir')

@@ -30,8 +30,10 @@
 #include "standalone_scaffolding.h"
 
 #include <assert.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+
 #include "util/ralloc.h"
 #include "util/strtod.h"
 #include "util/u_range_remap.h"

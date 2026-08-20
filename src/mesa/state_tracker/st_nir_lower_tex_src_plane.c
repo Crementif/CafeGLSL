@@ -66,7 +66,8 @@ add_sampler(lower_tex_src_state *state, unsigned orig_binding,
          find_sampler(state, orig_binding);
    char *name;
 
-   UNUSED int r = asprintf(&name, "%s:%s", orig_sampler->name, ext);
+   assert(false);
+   UNUSED int r = 0;//asprintf(&name, "%s:%s", orig_sampler->name, ext);
    new_sampler = nir_variable_create(state->shader, nir_var_uniform,
                              samplerExternalOES, name);
    free(name);
