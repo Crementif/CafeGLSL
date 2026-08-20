@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
 SCRIPTDIR="/opt/devkitpro"
 
+# Drop -O<n> from the flags <platform>vars.sh gives us. They end up in the cross file's
+# [built-in options], which meson puts after its own optimization flag, so the -O2 from
+# wiiuvars.sh would override --buildtype and -Doptimization=. Let meson pick the level.
+strip_opt_flags()
+{
+	local out="" f
+	for f in $*; do
+		case "$f" in
+		-O*) ;;
+		*) out="${out} ${f}" ;;
+		esac
+	done
+	echo "${out}"
+}
+
 make_flag_list()
 {
 	local first=1
@@ -72,6 +87,14 @@ case "$1" in
 	;;
 esac
 
+# Build the library without exceptions, RTTI and unwind tables. Mesa's only throw is
+# ASSERT_OR_THROW in src/gallium/drivers/r600/sfn/sfn_virtualvalues.h, which upstream already
+# guards with __cpp_exceptions and is not on the GX2 compile path. This took about 200 KB off
+# a consumer's RPX at no measurable runtime cost. Appended last so they win over the flags
+# wiiuvars.sh and meson put in front of them.
+SIZE_CFLAGS="-fno-asynchronous-unwind-tables -fno-unwind-tables"
+SIZE_CXXFLAGS="${SIZE_CFLAGS} -fno-exceptions -fno-rtti"
+
 echo "[binaries]"
 echo "c = '${TOOL_PREFIX}gcc'"
 echo "cpp = '${TOOL_PREFIX}g++'"
@@ -80,14 +103,14 @@ echo "strip = '${TOOL_PREFIX}strip'"
 echo "pkg-config = '${TOOL_PREFIX}pkg-config'"
 echo ""
 echo "[built-in options]"
-c_args_str=$(make_flag_list $CPPFLAGS $CFLAGS)
+c_args_str=$(make_flag_list $CPPFLAGS $(strip_opt_flags $CFLAGS) $SIZE_CFLAGS)
 if [ -n "$c_args_str" ]; then c_args_str="$c_args_str, "; fi
 echo "c_args = [${c_args_str}'-fno-pic', '-fno-pie']"
 
 c_link_str=$(make_flag_list $LDFLAGS $LIBS)
 echo "c_link_args = [${c_link_str}]"
 
-cpp_args_str=$(make_flag_list $CPPFLAGS $CXXFLAGS)
+cpp_args_str=$(make_flag_list $CPPFLAGS $(strip_opt_flags $CXXFLAGS) $SIZE_CXXFLAGS)
 if [ -n "$cpp_args_str" ]; then cpp_args_str="$cpp_args_str, "; fi
 echo "cpp_args = [${cpp_args_str}'-fno-pic', '-fno-pie']"
 
