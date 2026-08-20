@@ -383,6 +383,7 @@ public:
    void accept(ConstRegisterVisitor& vistor) const override;
    void print(std::ostream& os) const override;
    int kcache_bank() const { return m_kcache_bank; }
+   bool is_alu_const() const { return sel() >= 256 && sel() < 512; }
    PVirtualValue buf_addr() const;
    void set_buf_addr(PVirtualValue addr);
    UniformValue *as_uniform() override { return this; }

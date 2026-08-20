@@ -898,6 +898,8 @@ Shader::process_intrinsic(nir_intrinsic_instr *intr)
       return store_output(intr);
    case nir_intrinsic_load_input:
       return load_input(intr);
+   case nir_intrinsic_load_uniform:
+      return load_uniform(intr);
    case nir_intrinsic_load_ubo_vec4:
       return load_ubo(intr);
    case nir_intrinsic_store_scratch:
@@ -1616,6 +1618,46 @@ bool Shader::emit_barrier(nir_intrinsic_instr *intr)
       return emit_wait_ack();
    }
 
+   return true;
+}
+
+bool
+Shader::load_uniform(nir_intrinsic_instr *intr)
+{
+   auto literal = nir_src_as_const_value(intr->src[0]);
+   PVirtualValue indirect = nullptr;
+
+#if defined(CAFE_COMPILER) || defined(__WUT__)
+   constexpr unsigned alu_const_base = 256;
+   if (nir_intrinsic_base(intr) + (literal ? literal->u32 : 0) >= 256)
+      return false;
+   if (!literal)
+      indirect = value_factory().src(intr->src[0], 0);
+#else
+   if (!literal)
+      return false;
+#endif
+
+   auto pin = intr->def.num_components == 1 ? pin_free : pin_none;
+   for (unsigned i = 0; i < intr->def.num_components; ++i) {
+      PVirtualValue uniform;
+      if (literal) {
+         uniform = value_factory().uniform(intr, i);
+      } else {
+#if defined(CAFE_COMPILER) || defined(__WUT__)
+         uniform = new UniformValue(
+            alu_const_base + nir_intrinsic_base(intr), i, indirect, 0);
+#endif
+      }
+      assert(uniform);
+      emit_instruction(new AluInstr(op1_mov,
+                                    value_factory().dest(intr->def, i, pin),
+                                    uniform,
+                                    AluInstr::write));
+   }
+
+   if (indirect)
+      m_flags.set(sh_indirect_const_file);
    return true;
 }
 

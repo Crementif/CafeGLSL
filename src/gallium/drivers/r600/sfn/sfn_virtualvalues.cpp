@@ -784,6 +784,14 @@ void UniformValue::set_buf_addr(PVirtualValue addr)
 void
 UniformValue::print(std::ostream& os) const
 {
+   if (is_alu_const()) {
+      os << "C";
+      if (m_buf_addr)
+         os << "[" << *m_buf_addr << "]";
+      os << "[" << (sel() - 256) << "]." << chanchar[chan()];
+      return;
+   }
+
    os << "KC" << m_kcache_bank;
    if (m_buf_addr) {
       os << "[" << *m_buf_addr << "]";

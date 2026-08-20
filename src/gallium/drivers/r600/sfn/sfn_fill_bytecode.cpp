@@ -630,7 +630,17 @@ EncodeSourceVisitor::visit(const LocalArrayValue& value)
 void
 EncodeSourceVisitor::visit(const UniformValue& value)
 {
-   assert(value.sel() >= 512 && "Uniform values must have a sel >= 512");
+   if (value.is_alu_const()) {
+      assert(value.sel() >= 256 && value.sel() < 512);
+      if (value.buf_addr()) {
+         auto addr = value.buf_addr()->as_register();
+         assert(addr && addr->sel() == AddressRegister::addr);
+         src.rel = 1;
+      }
+      return;
+   }
+
+   assert(value.sel() >= 512 && "Kcache uniform values must have a sel >= 512");
    m_buffer_offset = value.buf_addr();
 #if defined(CAFE_COMPILER) || defined(__WUT__)
    constexpr unsigned latte_uniform_block_base = 0x80;

@@ -374,8 +374,11 @@ void CafeGLSLCompiler::_InitGLContext()
 	gl_context *ctx = glCtx;
 
     const int CAFE_MAX_UNIFORM_BLOCKS_PER_STAGE = 16;
+    const int CAFE_MAX_UNIFORM_COMPONENTS = 1024; // 256 vec4 ALU constants, 4KiB
     const int CAFE_MAX_UNIFORM_COMPONENTS_PER_BLOCK = 4096 * 4; // 4096 vec4, 64KiB. The actual HW limit might be higher (testing required)
-    const int CAFE_MAX_UNIFORM_COMPONENTS_COMBINED = CAFE_MAX_UNIFORM_BLOCKS_PER_STAGE * CAFE_MAX_UNIFORM_COMPONENTS_PER_BLOCK;
+    const int CAFE_MAX_UNIFORM_COMPONENTS_COMBINED =
+        CAFE_MAX_UNIFORM_COMPONENTS +
+        CAFE_MAX_UNIFORM_BLOCKS_PER_STAGE * CAFE_MAX_UNIFORM_COMPONENTS_PER_BLOCK;
     const int CAFE_MAX_TEXTURE_UNITS_PER_STAGE = 18;
     const int CAFE_MAX_VERTEX_STREAMS = 32;
 
@@ -419,28 +422,28 @@ void CafeGLSLCompiler::_InitGLContext()
 
     ctx->Const.Program[MESA_SHADER_VERTEX].MaxAttribs = CAFE_MAX_VERTEX_STREAMS;
     ctx->Const.Program[MESA_SHADER_VERTEX].MaxUniformBlocks = CAFE_MAX_UNIFORM_BLOCKS_PER_STAGE;
-    ctx->Const.Program[MESA_SHADER_VERTEX].MaxUniformComponents = CAFE_MAX_UNIFORM_COMPONENTS_PER_BLOCK;
+    ctx->Const.Program[MESA_SHADER_VERTEX].MaxUniformComponents = CAFE_MAX_UNIFORM_COMPONENTS;
     ctx->Const.Program[MESA_SHADER_VERTEX].MaxCombinedUniformComponents = CAFE_MAX_UNIFORM_COMPONENTS_COMBINED;
     ctx->Const.Program[MESA_SHADER_VERTEX].MaxInputComponents = 0; /* not used */
     ctx->Const.Program[MESA_SHADER_VERTEX].MaxOutputComponents = 128;
     ctx->Const.Program[MESA_SHADER_VERTEX].MaxTextureImageUnits = CAFE_MAX_TEXTURE_UNITS_PER_STAGE;
 
     ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxUniformBlocks = CAFE_MAX_UNIFORM_BLOCKS_PER_STAGE;
-    ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxUniformComponents = CAFE_MAX_UNIFORM_COMPONENTS_PER_BLOCK;
+    ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxUniformComponents = CAFE_MAX_UNIFORM_COMPONENTS;
     ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxCombinedUniformComponents = CAFE_MAX_UNIFORM_COMPONENTS_COMBINED;
     ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxInputComponents = ctx->Const.Program[MESA_SHADER_VERTEX].MaxOutputComponents;
     ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxOutputComponents = 128;
     ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits = CAFE_MAX_TEXTURE_UNITS_PER_STAGE;
 
     ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxUniformBlocks = CAFE_MAX_UNIFORM_BLOCKS_PER_STAGE;
-    ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxUniformComponents = CAFE_MAX_UNIFORM_COMPONENTS_PER_BLOCK;
+    ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxUniformComponents = CAFE_MAX_UNIFORM_COMPONENTS;
     ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxCombinedUniformComponents = CAFE_MAX_UNIFORM_COMPONENTS_COMBINED;
     ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxInputComponents = ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxOutputComponents;
     ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxOutputComponents = 0; /* not used */
     ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits = CAFE_MAX_TEXTURE_UNITS_PER_STAGE;
 
     ctx->Const.Program[MESA_SHADER_COMPUTE].MaxUniformBlocks = CAFE_MAX_UNIFORM_BLOCKS_PER_STAGE;
-    ctx->Const.Program[MESA_SHADER_COMPUTE].MaxUniformComponents = CAFE_MAX_UNIFORM_COMPONENTS_PER_BLOCK;
+    ctx->Const.Program[MESA_SHADER_COMPUTE].MaxUniformComponents = CAFE_MAX_UNIFORM_COMPONENTS;
     ctx->Const.Program[MESA_SHADER_COMPUTE].MaxCombinedUniformComponents = CAFE_MAX_UNIFORM_COMPONENTS_COMBINED;
     ctx->Const.Program[MESA_SHADER_COMPUTE].MaxInputComponents = 0; /* not used */
     ctx->Const.Program[MESA_SHADER_COMPUTE].MaxOutputComponents = 0; /* not used */
@@ -448,7 +451,7 @@ void CafeGLSLCompiler::_InitGLContext()
     ctx->Const.Program[MESA_SHADER_COMPUTE].MaxAtomicBuffers = 8; // todo - does Latte support atomic buffers?
     ctx->Const.Program[MESA_SHADER_COMPUTE].MaxAtomicCounters = 8;
 
-    // note: MaxUniformComponents is the total for non-block uniforms (which we currently reassign to uniform buffer 15)
+    // MaxUniformComponents is the direct ALU constant-file limit for non-block uniforms.
 
     // uniform block max size
     ctx->Const.MaxUniformBlockSize = CAFE_MAX_UNIFORM_COMPONENTS_PER_BLOCK * sizeof(uint32_t);

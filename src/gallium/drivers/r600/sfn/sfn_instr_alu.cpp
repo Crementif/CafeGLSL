@@ -418,7 +418,10 @@ void ReplaceIndirectArrayAddr::visit(LocalArrayValue& value)
 void ReplaceIndirectArrayAddr::visit(UniformValue& value)
 {
    if (value.buf_addr() && value.buf_addr()->as_register() &&
-       (new_addr->sel() == 1 || new_addr->sel() == 2)) {
+       ((value.is_alu_const() && new_addr->sel() == AddressRegister::addr) ||
+        (!value.is_alu_const() &&
+         (new_addr->sel() == AddressRegister::idx0 ||
+          new_addr->sel() == AddressRegister::idx1)))) {
       value.set_buf_addr(new_addr);
    }
 }
@@ -851,7 +854,10 @@ ResolveIndirectArrayAddr::visit(const UniformValue& value)
 {
    auto a = value.buf_addr();
    if (a) {
-      index = a->as_register();
+      if (value.is_alu_const())
+         addr = a->as_register();
+      else
+         index = a->as_register();
    }
 }
 

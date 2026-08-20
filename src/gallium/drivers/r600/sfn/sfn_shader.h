@@ -162,6 +162,7 @@ public:
    virtual bool load_input(nir_intrinsic_instr *intr) = 0;
    virtual bool store_output(nir_intrinsic_instr *intr) = 0;
 
+   bool load_uniform(nir_intrinsic_instr *intr);
    bool load_ubo(nir_intrinsic_instr *intr);
 
    ValueFactory& value_factory();

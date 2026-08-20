@@ -46,7 +46,7 @@
 #include <vector>
 
 constexpr unsigned kMaxUniformBlocks = 16;
-constexpr unsigned kLooseUniformBlock = 15;
+constexpr unsigned kMaxAluConstComponents = 1024;
 constexpr unsigned kMaxSamplers = 18;
 constexpr unsigned kLatteResourceBase = 0x80;
 
@@ -82,6 +82,7 @@ struct ReflectionInfo {
    std::vector<UniformInfo> uniforms;
    std::vector<SamplerInfo> samplers;
    std::vector<AttributeInfo> attributes;
+   bool has_loose_uniforms = false;
 };
 
 static unsigned UnpackedUniformSize(const glsl_type *type, bool bindless)
@@ -92,6 +93,12 @@ static unsigned UnpackedUniformSize(const glsl_type *type, bool bindless)
 static void InitializeR600NirOptions(nir_shader_compiler_options &options)
 {
    r600_init_nir_options(&options, R700, CHIP_RV730);
+
+   /* Upstream turns non-block uniforms into a UBO. We keep them as load_uniform so
+    * they land in Latte's ALU constant file instead. This is the only field where we
+    * deliberately differ from the driver's table.
+    */
+   options.lower_uniforms_to_ubo = false;
 }
 
 static int LookupParameterIndex(gl_program *program, nir_variable *variable)
@@ -234,18 +241,14 @@ static bool RemapUboInstruction(nir_builder *builder, nir_instr *instruction, vo
    }
 
    const unsigned old_index = nir_src_as_uint(intrinsic->src[0]);
-   unsigned new_index;
-   if (old_index == 0) {
-      new_index = kLooseUniformBlock;
-   } else if (old_index - 1 < state.bindings->size()) {
-      new_index = (*state.bindings)[old_index - 1];
-   } else {
+   if (old_index >= state.bindings->size()) {
       state.valid = false;
       return false;
    }
 
    builder->cursor = nir_before_instr(instruction);
-   nir_src_rewrite(&intrinsic->src[0], nir_imm_int(builder, new_index));
+   nir_src_rewrite(
+      &intrinsic->src[0], nir_imm_int(builder, (*state.bindings)[old_index]));
    state.progress = true;
    return true;
 }
@@ -262,14 +265,6 @@ static bool RemapUbos(nir_shader *nir,
    if (!state.valid) {
       diagnostics = "Dynamic or invalid UBO indexing is not supported yet";
       return false;
-   }
-
-   nir_foreach_variable_with_modes(variable, nir, nir_var_mem_ubo) {
-      if (variable->data.binding == 0) {
-         variable->data.binding = kLooseUniformBlock;
-      } else if (variable->data.binding - 1 < bindings.size()) {
-         variable->data.binding = bindings[variable->data.binding - 1];
-      }
    }
 
    return true;
@@ -394,8 +389,8 @@ static bool BuildReflection(gl_shader_program *shader_program,
       const char *name = block->name.string;
       if (!name)
          continue;
-      if (block->Binding >= kLooseUniformBlock) {
-         diagnostics = "Uniform block binding 15 is reserved for loose uniforms";
+      if (block->Binding >= kMaxUniformBlocks) {
+         diagnostics = "Uniform block binding exceeds Latte's 16 uniform-block slots";
          return false;
       }
 
@@ -408,7 +403,6 @@ static bool BuildReflection(gl_shader_program *shader_program,
       }
    }
 
-   bool has_loose_uniforms = false;
    const gl_uniform_storage *uniform_base = shader_program->data->UniformStorage;
 
    for (unsigned i = 0; i < shader_program->data->NumProgramResourceList; ++i) {
@@ -471,22 +465,10 @@ static bool BuildReflection(gl_shader_program *shader_program,
       } else {
          const int offset = FindParameterOffset(program, uniform_index);
          if (offset >= 0) {
-            has_loose_uniforms = true;
+            reflection.has_loose_uniforms = true;
             reflection.uniforms.push_back(
                {name, gx2_type, count, static_cast<uint32_t>(offset), -1});
          }
-      }
-   }
-
-   if (has_loose_uniforms) {
-      const int loose_block_index = static_cast<int>(reflection.blocks.size());
-      const uint32_t size = program->Parameters ?
-         ((program->Parameters->NumParameterValues + 3) & ~3u) * sizeof(uint32_t) : 0;
-      reflection.blocks.push_back(
-         {"__cafe_loose_uniforms", kLooseUniformBlock, size});
-      for (UniformInfo &uniform : reflection.uniforms) {
-         if (uniform.block < 0)
-            uniform.block = loose_block_index;
       }
    }
 
@@ -1023,8 +1005,8 @@ bool CafeCompiler::PrepareNir(CompileState &state, std::string &diagnostics)
 
    for (unsigned i = 0; i < state.program->info.num_ubos; ++i) {
       const gl_uniform_block *block = state.program->sh.UniformBlocks[i];
-      if (block->Binding >= kLooseUniformBlock) {
-         diagnostics = "Uniform block binding 15 is reserved for loose uniforms";
+      if (block->Binding >= kMaxUniformBlocks) {
+         diagnostics = "Uniform block binding exceeds Latte's 16 uniform-block slots";
          return false;
       }
       state.ubo_bindings.push_back(block->Binding);
@@ -1048,6 +1030,11 @@ bool CafeCompiler::PrepareNir(CompileState &state, std::string &diagnostics)
                         state.reflection,
                         diagnostics))
       return false;
+   if (state.program->Parameters &&
+       state.program->Parameters->NumParameterValues > kMaxAluConstComponents) {
+      diagnostics = "Non-block uniforms exceed Latte's 1024-component ALU constant file";
+      return false;
+   }
 
    NIR_PASS(_, state.nir, gl_nir_lower_buffers, state.shader_program);
    NIR_PASS(_, state.nir, nir_lower_system_values);
@@ -1056,7 +1043,6 @@ bool CafeCompiler::PrepareNir(CompileState &state, std::string &diagnostics)
       DIV_ROUND_UP(state.program->Parameters->NumParameterValues, 4) : 0;
    NIR_PASS(_, state.nir, nir_lower_io, nir_var_uniform,
             UnpackedUniformSize, static_cast<nir_lower_io_options>(0));
-   NIR_PASS(_, state.nir, nir_lower_uniforms_to_ubo, false, false);
    NIR_PASS(_, state.nir, nir_opt_copy_prop);
    NIR_PASS(_, state.nir, nir_opt_constant_folding);
    if (!RemapUbos(state.nir, state.ubo_bindings, diagnostics))
@@ -1117,7 +1103,8 @@ GX2VertexShader *CafeCompiler::CompileVertexShader(const char *source,
       return nullptr;
    }
 
-   output->mode = GX2_SHADER_MODE_UNIFORM_BLOCK;
+   output->mode = state.reflection.has_loose_uniforms ?
+      GX2_SHADER_MODE_UNIFORM_REGISTER : GX2_SHADER_MODE_UNIFORM_BLOCK;
    if (!CopyProgram(state.pipe_shader.shader, output->program, output->size) ||
        !CopyReflection(state.reflection, output.get()) ||
        !CopyAttributes(state.reflection, output.get())) {
@@ -1147,7 +1134,8 @@ GX2PixelShader *CafeCompiler::CompilePixelShader(const char *source,
       return nullptr;
    }
 
-   output->mode = GX2_SHADER_MODE_UNIFORM_BLOCK;
+   output->mode = state.reflection.has_loose_uniforms ?
+      GX2_SHADER_MODE_UNIFORM_REGISTER : GX2_SHADER_MODE_UNIFORM_BLOCK;
    if (!CopyProgram(state.pipe_shader.shader, output->program, output->size) ||
        !CopyReflection(state.reflection, output.get())) {
       diagnostics = "Out of memory copying pixel shader output";

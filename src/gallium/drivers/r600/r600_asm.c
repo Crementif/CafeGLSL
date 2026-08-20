@@ -491,9 +491,18 @@ static int is_kcache(unsigned sel)
          (sel > 256  && sel < 320);  /* Kcache 2 & 3 after translation (EG). */
 }
 
+static int is_alu_const(unsigned sel)
+{
+#if defined(CAFE_COMPILER) || defined(__WUT__)
+   return sel >= 256 && sel < 512;
+#else
+   return 0;
+#endif
+}
+
 static int is_const(int sel)
 {
-   return is_kcache(sel) ||
+   return is_kcache(sel) || is_alu_const(sel) ||
 		(sel >= V_SQ_ALU_SRC_0 &&
 		sel <= V_SQ_ALU_SRC_LITERAL);
 }
@@ -518,7 +527,7 @@ static int check_vector(const struct r600_bytecode *bc, const struct r600_byteco
 				if (r)
 					return r;
 			}
-      } else if (is_kcache(sel)) {
+      } else if (is_kcache(sel) || is_alu_const(sel)) {
 			r = reserve_cfile(bc, bs, (alu->src[src].kc_bank<<16) + sel, elem);
 			if (r)
 				return r;
@@ -545,7 +554,7 @@ static int check_scalar(const struct r600_bytecode *bc, const struct r600_byteco
 			else
 				const_count++;
 		}
-      if (is_kcache(sel)) {
+      if (is_kcache(sel) || is_alu_const(sel)) {
 			r = reserve_cfile(bc, bs, (alu->src[src].kc_bank<<16) + sel, elem);
 			if (r)
 				return r;

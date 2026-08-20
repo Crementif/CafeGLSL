@@ -374,6 +374,8 @@ Block::try_reserve_kcache(const AluGroup& group) const
    for (auto& kc : kcache_constants) {
       auto u = kc->as_uniform();
       assert(u);
+      if (u->is_alu_const())
+         continue;
       if (!try_reserve_kcache(*u, kcache)) {
          return {kcache, false};
       }
@@ -415,6 +417,8 @@ Block::try_reserve_kcache(const AluInstr& instr) const
    for (auto& src : instr.sources()) {
       auto u = src->as_uniform();
       if (u) {
+         if (u->is_alu_const())
+            continue;
          if (!try_reserve_kcache(*u, kcache)) {
             return {kcache, false};
          }
@@ -455,6 +459,8 @@ unsigned Block::s_max_kcache_banks = 4;
 bool
 Block::try_reserve_kcache(const UniformValue& u, std::array<KCacheLine, 4>& kcache) const
 {
+   if (u.is_alu_const())
+      return true;
 
    int bank = u.kcache_bank();
    int sel = (u.sel() - 512);

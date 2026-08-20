@@ -15,6 +15,7 @@
 constexpr uint32_t kCfTex = 1;
 constexpr uint32_t kCfVtx = 2;
 constexpr uint32_t kCfVtxTc = 3;
+constexpr uint32_t kCfAlu = 8;
 constexpr uint32_t kVFetch = 0;
 
 static int FindUniformBlock(const GX2UniformBlock *blocks, uint32_t count, const char *name)
@@ -92,6 +93,67 @@ static bool HasVFetchInTexClause(const void *program,
    return false;
 }
 
+static bool HasAluConstSource(const void *program,
+                              uint32_t size,
+                              uint32_t selector,
+                              bool relative)
+{
+   const auto *words = static_cast<const uint32_t *>(program);
+   const uint32_t word_count = size / sizeof(uint32_t);
+   for (uint32_t i = 0; i + 1 < word_count; i += 2) {
+      const uint32_t cf_word0 = words[i];
+      const uint32_t cf_word1 = words[i + 1];
+      const uint32_t alu_opcode = (cf_word1 >> 26) & 0xf;
+      const bool is_alu = alu_opcode >= kCfAlu;
+      if (is_alu) {
+         const uint32_t count = ((cf_word1 >> 18) & 0x7f) + 1;
+         const uint32_t clause_start = (cf_word0 & 0x3fffff) * 2;
+         for (uint32_t instruction = 0; instruction < count; ++instruction) {
+            const uint32_t alu_word = clause_start + instruction * 2;
+            if (alu_word + 1 >= word_count)
+               break;
+            const uint32_t word0 = words[alu_word];
+            const uint32_t selectors[2] = {
+               word0 & 0x1ff,
+               (word0 >> 13) & 0x1ff,
+            };
+            const bool relatives[2] = {
+               ((word0 >> 9) & 1) != 0,
+               ((word0 >> 22) & 1) != 0,
+            };
+            for (unsigned source = 0; source < 2; ++source) {
+               if (selectors[source] == selector &&
+                   (!relative || relatives[source]))
+                  return true;
+            }
+         }
+      }
+      if (!is_alu && (cf_word1 & (1u << 21)))
+         break;
+   }
+   return false;
+}
+
+static bool HasKcacheBank(const void *program, uint32_t size, uint32_t bank)
+{
+   const auto *words = static_cast<const uint32_t *>(program);
+   const uint32_t word_count = size / sizeof(uint32_t);
+   for (uint32_t i = 0; i + 1 < word_count; i += 2) {
+      const uint32_t word0 = words[i];
+      const uint32_t word1 = words[i + 1];
+      const bool is_alu = ((word1 >> 26) & 0xf) >= kCfAlu;
+      if (is_alu) {
+         const uint32_t mode0 = (word0 >> 30) & 0x3;
+         const uint32_t mode1 = word1 & 0x3;
+         if ((mode0 && ((word0 >> 22) & 0xf) == bank) ||
+             (mode1 && ((word0 >> 26) & 0xf) == bank))
+            return true;
+      }
+      if (!is_alu && (word1 & (1u << 21)))
+         break;
+   }
+   return false;
+}
 
 int main()
 {
@@ -162,6 +224,7 @@ void main() {
       return 1;
    }
    CHECK(vertex->program && vertex->size);
+   CHECK(vertex->mode == GX2_SHADER_MODE_UNIFORM_BLOCK);
    CHECK(vertex->attribVarCount == 2);
    CHECK(vertex->regs.pa_cl_vs_out_cntl == 0);
    CHECK(vertex->regs.num_sq_vtx_semantic == 2);
@@ -182,13 +245,14 @@ void main() {
       return 1;
    }
    CHECK(pixel->program && pixel->size);
+   CHECK(pixel->mode == GX2_SHADER_MODE_UNIFORM_REGISTER);
    CHECK((pixel->regs.spi_ps_input_cntls[0] & 0xff) == 0x8a);
    CHECK(FindUniformBlock(pixel->uniformBlocks,
                           pixel->uniformBlockCount,
                           "PixelData") == 9);
-   CHECK(FindUniformBlock(pixel->uniformBlocks,
-                          pixel->uniformBlockCount,
-                          "__cafe_loose_uniforms") == 15);
+   CHECK(pixel->uniformBlockCount == 1);
+   CHECK(HasAluConstSource(pixel->program, pixel->size, 257, false));
+   CHECK(HasKcacheBank(pixel->program, pixel->size, 9));
    CHECK(FindSampler(pixel->samplerVars,
                      pixel->samplerVarCount,
                      "sourceTexture") == 2);
@@ -204,10 +268,44 @@ void main() {
    const GX2UniformVar *loose_factor = FindUniform(
       pixel->uniformVars, pixel->uniformVarCount, "looseData.factor");
    CHECK(tint && tint->offset == 16);
+   CHECK(tint->block == 0);
    CHECK(exposure && exposure->offset == 16);
+   CHECK(exposure->block == -1);
    CHECK(loose_color && loose_factor);
    CHECK(loose_factor->offset > loose_color->offset);
-   CHECK(loose_factor->block == loose_color->block);
+   CHECK(loose_color->block == -1);
+   CHECK(loose_factor->block == -1);
+
+   GX2VertexShader *loose_vertex = CompileVertexShader(
+      "#version 450\n"
+      "uniform vec4 positions[4];\n"
+      "void main() { gl_Position = positions[gl_VertexID & 3]; }\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   CHECK(loose_vertex);
+   CHECK(loose_vertex->mode == GX2_SHADER_MODE_UNIFORM_REGISTER);
+   CHECK(loose_vertex->uniformBlockCount == 0);
+   CHECK(HasAluConstSource(loose_vertex->program,
+                           loose_vertex->size,
+                           256,
+                           true));
+
+   GX2VertexShader *last_uniform_block = CompileVertexShader(
+      "#version 450\n"
+      "layout(binding = 15, std140) uniform LastBlock { vec4 position; };\n"
+      "void main() { gl_Position = position; }\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   CHECK(last_uniform_block);
+   CHECK(last_uniform_block->mode == GX2_SHADER_MODE_UNIFORM_BLOCK);
+   CHECK(FindUniformBlock(last_uniform_block->uniformBlocks,
+                          last_uniform_block->uniformBlockCount,
+                          "LastBlock") == 15);
+   CHECK(HasKcacheBank(last_uniform_block->program,
+                       last_uniform_block->size,
+                       15));
 
    GX2PixelShader *sampler_aggregate = CompilePixelShader(
       "#version 450\n"
@@ -277,6 +375,8 @@ void main() {
 
    FreeVertexShader(vertex);
    FreeVertexShader(vertex_id);
+   FreeVertexShader(loose_vertex);
+   FreeVertexShader(last_uniform_block);
    FreePixelShader(pixel);
    FreePixelShader(environment_pass);
    DestroyGLSLCompiler();

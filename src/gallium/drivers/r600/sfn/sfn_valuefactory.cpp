@@ -216,7 +216,12 @@ ValueFactory::uniform(nir_intrinsic_instr *load_uniform, int chan)
    auto literal = nir_src_as_const_value(load_uniform->src[0]);
    assert(literal);
 
-   int index = nir_intrinsic_base(load_uniform) + +literal->u32 + 512;
+#if defined(CAFE_COMPILER) || defined(__WUT__)
+   constexpr unsigned alu_const_base = 256;
+   int index = nir_intrinsic_base(load_uniform) + literal->u32 + alu_const_base;
+#else
+   int index = nir_intrinsic_base(load_uniform) + literal->u32 + 512;
+#endif
 
    return uniform(index, chan, 0);
 }
