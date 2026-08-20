@@ -1648,6 +1648,10 @@ Shader::load_ubo(nir_intrinsic_instr *instr)
          ir = new LoadFromBuffer(
             dest, dest_swz, addr, 0, base_id, buffer_id, fmt_32_32_32_32_float);
       }
+#if defined(CAFE_COMPILER) || defined(__WUT__)
+      /* Latte routes dynamic uniform-buffer reads through TEX clauses. */
+      ir->set_fetch_flag(FetchInstr::use_tc);
+#endif
       emit_instruction(ir);
       return true;
    }

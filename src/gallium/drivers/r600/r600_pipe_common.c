@@ -18,7 +18,9 @@
 #include "git_sha1.h"
 
 #include <inttypes.h>
+#if !defined(__WUT__)
 #include <sys/utsname.h>
+#endif
 #include <stdlib.h>
 
 struct r600_multi_fence {
@@ -972,7 +974,9 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 			     struct radeon_winsys *ws)
 {
 	char family_name[32] = {}, kernel_version[128] = {};
+#if !defined(__WUT__)
 	struct utsname uname_data;
+#endif
 	const char *chip_name;
 
 	ws->query_info(ws, &rscreen->info);
@@ -980,9 +984,11 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 
 	chip_name = r600_get_family_name(rscreen);
 
+#if !defined(__WUT__)
 	if (uname(&uname_data) == 0)
 		snprintf(kernel_version, sizeof(kernel_version),
 			 " / %s", uname_data.release);
+#endif
 
 	snprintf(rscreen->renderer_string, sizeof(rscreen->renderer_string),
 		 "%s (%sDRM %i.%i.%i%s)",
@@ -1083,7 +1089,17 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 		printf("max_alignment = %u\n", (unsigned)rscreen->info.max_alignment);
 	}
 
-	const bool fp64_emulation = rscreen->info.gfx_level < CAYMAN;
+	r600_init_nir_options(&rscreen->nir_options, rscreen->info.gfx_level,
+			      rscreen->info.family);
+
+	return true;
+}
+
+void r600_init_nir_options(struct nir_shader_compiler_options *options,
+			   enum amd_gfx_level gfx_level,
+			   enum radeon_family family)
+{
+	const bool fp64_emulation = gfx_level < CAYMAN;
 
 	const struct nir_shader_compiler_options nir_options = {
 		.float_mul_add16 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
@@ -1133,38 +1149,38 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 		.lower_image_offset_to_range_base = 1,
 		.vectorize_tess_levels = 1,
 		.io_options = nir_io_mediump_is_32bit,
-		.vertex_id_zero_based = rscreen->info.gfx_level >= EVERGREEN,
+		.vertex_id_zero_based = gfx_level >= EVERGREEN,
 		.avoid_ternary_with_fabs = 1,
 	};
 
-	rscreen->nir_options = nir_options;
+	*options = nir_options;
 
-	if (rscreen->info.family < CHIP_CEDAR)
-		rscreen->nir_options.force_indirect_unrolling_sampler = true;
+	if (family < CHIP_CEDAR)
+		options->force_indirect_unrolling_sampler = true;
 
-	if (rscreen->info.gfx_level >= EVERGREEN) {
-		rscreen->nir_options.has_bfe = true;
-		rscreen->nir_options.has_bfm = true;
-		rscreen->nir_options.has_bitfield_select = true;
+	if (gfx_level >= EVERGREEN) {
+		options->has_bfe = true;
+		options->has_bfm = true;
+		options->has_bitfield_select = true;
 	}
 
-	if (rscreen->info.gfx_level < EVERGREEN) {
+	if (gfx_level < EVERGREEN) {
 		/* Pre-EG doesn't have these ALU ops */
-		rscreen->nir_options.lower_bit_count = true;
-		rscreen->nir_options.lower_bitfield_reverse = true;
+		options->lower_bit_count = true;
+		options->lower_bitfield_reverse = true;
 	}
 
 	if (fp64_emulation) {
-		rscreen->nir_options.lower_atomic_offset_to_range_base = true;
+		options->lower_atomic_offset_to_range_base = true;
 
-		rscreen->nir_options.lower_doubles_options =
+		options->lower_doubles_options =
 			nir_lower_fp64_full_software |
 			nir_lower_dceil |
 			nir_lower_dsqrt |
 			nir_lower_drcp |
 			nir_lower_drsq;
 	} else {
-		rscreen->nir_options.lower_doubles_options =
+		options->lower_doubles_options =
 			nir_lower_ddiv |
 			nir_lower_dfloor |
 			nir_lower_dceil |
@@ -1177,10 +1193,8 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 	uint8_t indirect_supported_mask =
 		(uint8_t)BITFIELD_MASK(MESA_SHADER_STAGES) &
 		~BITFIELD_BIT(MESA_SHADER_FRAGMENT);
-	rscreen->nir_options.support_indirect_inputs = indirect_supported_mask;
-	rscreen->nir_options.support_indirect_outputs = indirect_supported_mask;
-
-	return true;
+	options->support_indirect_inputs = indirect_supported_mask;
+	options->support_indirect_outputs = indirect_supported_mask;
 }
 
 void r600_destroy_common_screen(struct r600_common_screen *rscreen)

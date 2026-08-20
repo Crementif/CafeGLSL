@@ -751,6 +751,15 @@ void r600_draw_rectangle(struct blitter_context *blitter,
 			 const struct blitter_attrib *attrib);
 bool r600_common_screen_init(struct r600_common_screen *rscreen,
 			     struct radeon_winsys *ws);
+#ifdef __cplusplus
+extern "C"
+#endif
+/* Fills in the NIR options the SFN backend expects for a given chip. Split out of
+ * r600_common_screen_init so the Cafe compiler can get the same table without a winsys.
+ */
+void r600_init_nir_options(struct nir_shader_compiler_options *options,
+			   enum amd_gfx_level gfx_level,
+			   enum radeon_family family);
 void r600_destroy_common_screen(struct r600_common_screen *rscreen);
 void r600_preflush_suspend_features(struct r600_common_context *ctx);
 void r600_postflush_resume_features(struct r600_common_context *ctx);
@@ -1009,9 +1018,15 @@ r600_as_texture(struct pipe_resource *res)
 	(((unsigned)(s2x) & 0xf) << 16) | (((unsigned)(s2y) & 0xf) << 20) |	   \
 	 (((unsigned)(s3x) & 0xf) << 24) | (((unsigned)(s3y) & 0xf) << 28))
 
+
+// S_FIXED is defined more than once
+#if !defined(NO_SFIXED)
+
 static inline int S_FIXED(float value, unsigned frac_bits)
 {
 	return value * (1 << frac_bits);
 }
+
+#endif
 
 #endif

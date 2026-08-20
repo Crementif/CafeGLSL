@@ -632,7 +632,18 @@ EncodeSourceVisitor::visit(const UniformValue& value)
 {
    assert(value.sel() >= 512 && "Uniform values must have a sel >= 512");
    m_buffer_offset = value.buf_addr();
+#if defined(CAFE_COMPILER) || defined(__WUT__)
+   constexpr unsigned latte_uniform_block_base = 0x80;
+   constexpr unsigned latte_uniform_block_count = 16;
+   unsigned bank = value.kcache_bank();
+   assert(bank < latte_uniform_block_count ||
+          (bank >= latte_uniform_block_base &&
+           bank < latte_uniform_block_base + latte_uniform_block_count));
+   src.kc_bank = bank < latte_uniform_block_count ?
+      bank + latte_uniform_block_base : bank;
+#else
    src.kc_bank = value.kcache_bank();
+#endif
 }
 
 void

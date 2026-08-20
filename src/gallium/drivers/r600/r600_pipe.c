@@ -225,6 +225,7 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen,
 	if (rscreen->b.debug_flags & DBG_FORCE_DMA)
 		rctx->b.b.resource_copy_region = rctx->b.dma_copy;
 
+/*
 	rctx->blitter = util_blitter_create(&rctx->b.b);
 	if (rctx->blitter == NULL)
 		goto fail;
@@ -256,7 +257,7 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen,
 						     TGSI_SEMANTIC_GENERIC,
 						     TGSI_INTERPOLATE_CONSTANT);
 	rctx->b.b.bind_fs_state(&rctx->b.b, rctx->dummy_pixel_shader);
-
+*/
 	rctx->lds_constbuf_pipe.user_buffer = &rctx->lds_constant_buffer;
 	rctx->lds_constbuf_pipe.buffer_size = sizeof(struct r600_lds_constant_buffer);
 
@@ -784,6 +785,6 @@ struct pipe_screen *r600_screen_create(struct radeon_winsys *ws,
 	if (rscreen->b.debug_flags & DBG_TEST_DMA)
 		r600_test_dma(&rscreen->b);
 
-	r600_query_fix_enabled_rb_mask(&rscreen->b);
+	//r600_query_fix_enabled_rb_mask(&rscreen->b);
 	return &rscreen->b.b;
 }

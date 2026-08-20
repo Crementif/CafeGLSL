@@ -30,9 +30,14 @@
 #include "util/u_endian.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
+
 #include <assert.h>
-#include <stdio.h>
 #include <errno.h>
+#include <stdio.h>
+
+#if defined(__WUT__)
+#include <coreinit/debug.h>
+#endif
 
 /* CAYMAN notes
 Why CAYMAN got loops for lots of instructions is explained here.
@@ -216,15 +221,16 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 			r600_bytecode_disasm(&shader->gs_copy_shader->shader.bc);
                 }
 
-		if ((r = store_shader(ctx, shader->gs_copy_shader)))
-			goto error;
+		//if ((r = store_shader(ctx, shader->gs_copy_shader)))
+		//	goto error;
 	}
 
 	/* Store the shader in a buffer. */
-	if ((r = store_shader(ctx, shader)))
-		goto error;
+	//if ((r = store_shader(ctx, shader)))
+	//	goto error;
 
 	/* Build state. */
+	/*
 	switch (shader->shader.processor_type) {
 	case MESA_SHADER_TESS_CTRL:
 		evergreen_update_hs_state(ctx, shader);
@@ -274,6 +280,7 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 		r = -EINVAL;
 		goto error;
 	}
+	*/
 
 	if (unlikely(rctx->screen->b.debug_flags & DBG_SHADER_DB)) {
 		util_debug_message(&rctx->b.debug, SHADER_INFO, "%s shader: %d dw, %d gprs, %d alu_groups, %d loops, %d cf, %d stack",
@@ -328,6 +335,10 @@ void *r600_create_vertex_fetch_shader(struct pipe_context *ctx,
 				      unsigned count,
 				      const struct pipe_vertex_element *elements)
 {
+#if defined(CAFE_COMPILER) || defined(__WUT__)
+	assert(false);
+	return NULL;
+#else
 	struct r600_context *rctx = (struct r600_context *)ctx;
 	struct r600_bytecode bc;
 	struct r600_bytecode_vtx vtx;
@@ -560,6 +571,7 @@ void *r600_create_vertex_fetch_shader(struct pipe_context *ctx,
 	FREE(shader);
 	return NULL;
 
+#endif
 }
 
 int eg_get_interpolator_index(unsigned interpolate, unsigned location)

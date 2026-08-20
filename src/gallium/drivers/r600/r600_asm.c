@@ -1077,7 +1077,12 @@ static int r600_bytecode_alloc_inst_kcache_lines(struct r600_bytecode *bc,
 			continue;
 
 		bank = alu->src[i].kc_bank;
+#if defined(CAFE_COMPILER) || defined(__WUT__)
+		// Latte uniform buffer range is 0x80 to 0x8F
+		assert(bank >= 0x80 && bank <= 0x8F);
+#else
 		assert(bank < R600_MAX_ALU_CONST_BUFFERS);
+#endif
 		line = (sel-512)>>4;
 		index_mode = alu->src[i].kc_rel;
 
@@ -1452,8 +1457,14 @@ static int r600_bytecode_add_vtx_internal(struct r600_bytecode *bc, const struct
 		}
 		switch (bc->gfx_level) {
 		case R600:
-		case R700:
 			bc->cf_last->op = CF_OP_VTX;
+			break;
+		case R700:
+#if defined(CAFE_COMPILER) || defined(__WUT__)
+			bc->cf_last->op = use_tc ? CF_OP_TEX : CF_OP_VTX;
+#else
+			bc->cf_last->op = CF_OP_VTX;
+#endif
 			break;
 		case EVERGREEN:
 			if (use_tc)
@@ -1915,7 +1926,11 @@ int r600_bytecode_build(struct r600_bytecode *bc)
 			}
 		} else if (cf->op == CF_OP_TEX) {
 			LIST_FOR_EACH_ENTRY(vtx, &cf->vtx, list) {
+#if defined(CAFE_COMPILER) || defined(__WUT__)
+				assert(bc->gfx_level >= EVERGREEN || bc->gfx_level == R700);
+#else
 				assert(bc->gfx_level >= EVERGREEN);
+#endif
 				r = r600_bytecode_vtx_build(bc, vtx, addr);
 				if (r)
 					return r;

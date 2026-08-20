@@ -161,6 +161,10 @@ sfn_nir_algebraic_c = custom_target(
 r600_c_args = []
 
 r600_cpp_args = []
+if mode_cafecompiler
+  r600_c_args += '-DCAFE_COMPILER'
+  r600_cpp_args += '-DCAFE_COMPILER'
+endif
 if cpp.has_type('std::pmr::monotonic_buffer_resource',
                  prefix : '#include <memory_resource>')
    r600_cpp_args += '-DHAVE_MEMORY_RESOURCE'

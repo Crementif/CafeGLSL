@@ -56,10 +56,16 @@
 
 #define R600_MAX_USER_CONST_BUFFERS 15
 #define R600_MAX_DRIVER_CONST_BUFFERS 3
-#define R600_MAX_CONST_BUFFERS (R600_MAX_USER_CONST_BUFFERS + R600_MAX_DRIVER_CONST_BUFFERS)
+// on GX2 texture units are assigned 0-17
+// and uniform buffers 0x80 - 0x8F
+#define R600_TEX_UNIT_BASE 0
+// Mesa seems to use R600_MAX_CONST_BUFFERS as an offset for texture indices.
+// We want them to start at 0 so we set it to 0
+#define R600_MAX_CONST_BUFFERS R600_TEX_UNIT_BASE //(R600_MAX_USER_CONST_BUFFERS + R600_MAX_DRIVER_CONST_BUFFERS)
+#define R600_MAX_HW_CONST_BUFFERS 16
 
 /* start driver buffers after user buffers */
-#define R600_BUFFER_INFO_CONST_BUFFER (R600_MAX_USER_CONST_BUFFERS)
+#define R600_BUFFER_INFO_CONST_BUFFER  0x8F // GX2 uniform buffer 15     //(R600_MAX_USER_CONST_BUFFERS)
 #define R600_UCP_SIZE (4*4*8)
 #define R600_CS_BLOCK_GRID_SIZE (8 * 4)
 #define R600_TCS_DEFAULT_LEVELS_SIZE (6 * 4)
