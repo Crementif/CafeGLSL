@@ -376,6 +376,7 @@ void main() {
    CHECK(loose_vertex);
    CHECK(loose_vertex->mode == GX2_SHADER_MODE_UNIFORM_REGISTER);
    CHECK(loose_vertex->uniformBlockCount == 0);
+   CHECK(!diagnostics[0]);
    CHECK(HasAluConstSource(loose_vertex->program,
                            loose_vertex->size,
                            256,
@@ -502,14 +503,10 @@ void main() {
    CHECK(HasKcacheBank(mixed_uniforms->program, mixed_uniforms->size, 0));
    CHECK(HasKcacheBank(mixed_uniforms->program, mixed_uniforms->size, 15));
    CHECK(!ReadsAluConstFile(mixed_uniforms->program, mixed_uniforms->size));
-   CHECK(mixed_uniforms->uniformBlocks[FindUniformBlockIndex(
-            mixed_uniforms->uniformBlocks,
-            mixed_uniforms->uniformBlockCount,
-            "__cafe_loose_uniforms")].size == 16);
    CHECK(strstr(diagnostics, "warning:"));
-   CHECK(strstr(diagnostics, "__cafe_loose_uniforms"));
    CHECK(strstr(diagnostics, "GX2SetVertexUniformBlock"));
 
+   /* Only mixed shaders lose binding 0. */
    CHECK(!CompileVertexShader(
       "#version 450\n"
       "layout(binding = 0, std140) uniform Data { vec4 scale; };\n"
@@ -519,19 +516,6 @@ void main() {
       sizeof(diagnostics),
       GLSL_COMPILER_FLAG_NONE));
    CHECK(strstr(diagnostics, "binding 0 is reserved"));
-
-   /* Only mixed shaders lose binding 0. */
-   GX2VertexShader *block_zero_alone = CompileVertexShader(
-      "#version 450\n"
-      "layout(binding = 0, std140) uniform Data { vec4 scale; };\n"
-      "void main() { gl_Position = scale; }\n",
-      diagnostics,
-      sizeof(diagnostics),
-      GLSL_COMPILER_FLAG_NONE);
-   CHECK(block_zero_alone);
-   CHECK(FindUniformBlock(block_zero_alone->uniformBlocks,
-                          block_zero_alone->uniformBlockCount,
-                          "Data") == 0);
 
    /* Deliberately an error rather than a silent move into a block. */
    CHECK(!CompileVertexShader(
@@ -561,17 +545,6 @@ void main() {
             oversized_mixed->uniformBlocks,
             oversized_mixed->uniformBlockCount,
             "__cafe_loose_uniforms")].size == 300 * 16);
-
-   GX2VertexShader *quiet_loose = CompileVertexShader(
-      "#version 450\n"
-      "uniform vec4 offset;\n"
-      "void main() { gl_Position = offset; }\n",
-      diagnostics,
-      sizeof(diagnostics),
-      GLSL_COMPILER_FLAG_NONE);
-   CHECK(quiet_loose);
-   CHECK(quiet_loose->mode == GX2_SHADER_MODE_UNIFORM_REGISTER);
-   CHECK(!diagnostics[0]);
 
    GX2VertexShader *vertex_id = CompileVertexShader(
       "#version 450\n"
@@ -619,6 +592,365 @@ void main() {
    CHECK(!dynamic_block);
    CHECK(strstr(diagnostics, "UBO indexing"));
 
+   /* Test shaders taken from abood's RIO-Tests, with permission.
+    * https://github.com/aboood40091/RIO-Tests
+    */
+   static const char rio_primitive_vertex[] = R"(
+#version 330 core
+
+uniform vec4 wvp[4];
+uniform vec4 user[3];
+uniform vec4 color0;
+uniform vec4 color1;
+
+in vec3 Vertex;
+in vec2 TexCoord0;
+in vec4 ColorRate;
+
+out vec4 Color;
+out vec2 TexCoord;
+
+void main()
+{
+    vec4 uwvp[4] = vec4[4](
+        vec4(
+            wvp[0][0] * user[0][0] + wvp[0][1] * user[1][0] + wvp[0][2] * user[2][0],
+            wvp[0][0] * user[0][1] + wvp[0][1] * user[1][1] + wvp[0][2] * user[2][1],
+            wvp[0][0] * user[0][2] + wvp[0][1] * user[1][2] + wvp[0][2] * user[2][2],
+            wvp[0][0] * user[0][3] + wvp[0][1] * user[1][3] + wvp[0][2] * user[2][3] + wvp[0][3]
+        ),
+        vec4(
+            wvp[1][0] * user[0][0] + wvp[1][1] * user[1][0] + wvp[1][2] * user[2][0],
+            wvp[1][0] * user[0][1] + wvp[1][1] * user[1][1] + wvp[1][2] * user[2][1],
+            wvp[1][0] * user[0][2] + wvp[1][1] * user[1][2] + wvp[1][2] * user[2][2],
+            wvp[1][0] * user[0][3] + wvp[1][1] * user[1][3] + wvp[1][2] * user[2][3] + wvp[1][3]
+        ),
+        vec4(
+            wvp[2][0] * user[0][0] + wvp[2][1] * user[1][0] + wvp[2][2] * user[2][0],
+            wvp[2][0] * user[0][1] + wvp[2][1] * user[1][1] + wvp[2][2] * user[2][1],
+            wvp[2][0] * user[0][2] + wvp[2][1] * user[1][2] + wvp[2][2] * user[2][2],
+            wvp[2][0] * user[0][3] + wvp[2][1] * user[1][3] + wvp[2][2] * user[2][3] + wvp[2][3]
+        ),
+        vec4(
+            wvp[3][0] * user[0][0] + wvp[3][1] * user[1][0] + wvp[3][2] * user[2][0],
+            wvp[3][0] * user[0][1] + wvp[3][1] * user[1][1] + wvp[3][2] * user[2][1],
+            wvp[3][0] * user[0][2] + wvp[3][1] * user[1][2] + wvp[3][2] * user[2][2],
+            wvp[3][0] * user[0][3] + wvp[3][1] * user[1][3] + wvp[3][2] * user[2][3] + wvp[3][3]
+        )
+    );
+    vec4 pos = vec4(Vertex, 1);
+
+    gl_Position = vec4(dot(uwvp[0], pos),
+                       dot(uwvp[1], pos),
+                       dot(uwvp[2], pos),
+                       dot(uwvp[3], pos));
+
+    Color = color0 * (1.0 - ColorRate.r) + color1 * ColorRate.r;
+    TexCoord = TexCoord0;
+}
+)";
+
+   static const char rio_primitive_pixel[] = R"(
+#version 330 core
+
+uniform sampler2D texture0;
+uniform float rate;
+
+in vec4 Color;
+in vec2 TexCoord;
+
+out vec4 FragColor;
+
+void main()
+{
+    vec4 color = texture(texture0, TexCoord);
+    FragColor.r = Color.r * (color.r * rate + (1 - rate));
+    FragColor.g = Color.g * (color.g * rate + (1 - rate));
+    FragColor.b = Color.b * (color.b * rate + (1 - rate));
+    FragColor.a = Color.a * (color.a * rate + (1 - rate));
+}
+)";
+
+   GX2VertexShader *rio_primitive_vs = CompileVertexShader(
+      rio_primitive_vertex, diagnostics, sizeof(diagnostics), GLSL_COMPILER_FLAG_NONE);
+   if (!rio_primitive_vs) {
+      fprintf(stderr, "RIO primitive_renderer.vert failed: %s\n", diagnostics);
+      return 1;
+   }
+   CHECK(rio_primitive_vs->mode == GX2_SHADER_MODE_UNIFORM_REGISTER);
+   CHECK(rio_primitive_vs->uniformBlockCount == 0);
+   /* No layout qualifiers, so these have to come out in declaration order. */
+   CHECK(rio_primitive_vs->attribVarCount == 3);
+   CHECK(FindAttribute(rio_primitive_vs->attribVars,
+                       rio_primitive_vs->attribVarCount, "Vertex") == 0);
+   CHECK(FindAttribute(rio_primitive_vs->attribVars,
+                       rio_primitive_vs->attribVarCount, "TexCoord0") == 1);
+   CHECK(FindAttribute(rio_primitive_vs->attribVars,
+                       rio_primitive_vs->attribVarCount, "ColorRate") == 2);
+   CHECK(rio_primitive_vs->regs.num_sq_vtx_semantic == 3);
+   CHECK(rio_primitive_vs->regs.sq_vtx_semantic[0] == 0);
+   CHECK(rio_primitive_vs->regs.sq_vtx_semantic[1] == 1);
+   CHECK(rio_primitive_vs->regs.sq_vtx_semantic[2] == 2);
+   /* rio::PrimitiveRenderer uploads these as raw vec4 runs, so they pack tightly. */
+   const GX2UniformVar *rio_wvp = FindUniform(
+      rio_primitive_vs->uniformVars, rio_primitive_vs->uniformVarCount, "wvp");
+   const GX2UniformVar *rio_user = FindUniform(
+      rio_primitive_vs->uniformVars, rio_primitive_vs->uniformVarCount, "user");
+   const GX2UniformVar *rio_color0 = FindUniform(
+      rio_primitive_vs->uniformVars, rio_primitive_vs->uniformVarCount, "color0");
+   const GX2UniformVar *rio_color1 = FindUniform(
+      rio_primitive_vs->uniformVars, rio_primitive_vs->uniformVarCount, "color1");
+   CHECK(rio_wvp && rio_wvp->count == 4 && rio_wvp->offset == 0);
+   CHECK(rio_wvp->type == GX2_SHADER_VAR_TYPE_FLOAT4 && rio_wvp->block == -1);
+   CHECK(rio_user && rio_user->count == 3 && rio_user->offset == 64);
+   CHECK(rio_color0 && rio_color0->count == 1 && rio_color0->offset == 112);
+   CHECK(rio_color1 && rio_color1->count == 1 && rio_color1->offset == 128);
+
+   GX2PixelShader *rio_primitive_ps = CompilePixelShader(
+      rio_primitive_pixel, diagnostics, sizeof(diagnostics), GLSL_COMPILER_FLAG_NONE);
+   if (!rio_primitive_ps) {
+      fprintf(stderr, "RIO primitive_renderer.frag failed: %s\n", diagnostics);
+      return 1;
+   }
+   CHECK(rio_primitive_ps->mode == GX2_SHADER_MODE_UNIFORM_REGISTER);
+   CHECK(FindSampler(rio_primitive_ps->samplerVars,
+                     rio_primitive_ps->samplerVarCount, "texture0") == 0);
+   const GX2UniformVar *rio_rate = FindUniform(
+      rio_primitive_ps->uniformVars, rio_primitive_ps->uniformVarCount, "rate");
+   CHECK(rio_rate && rio_rate->offset == 0 && rio_rate->block == -1);
+   /* The two separate compiles have to agree on which semantic carries what. */
+   CHECK(rio_primitive_vs->regs.num_spi_vs_out_id == 1);
+   CHECK(rio_primitive_ps->regs.num_spi_ps_input_cntl == 2);
+   CHECK(VertexExportSemantic(rio_primitive_vs, 0) ==
+         PixelInputSemantic(rio_primitive_ps, 0));
+   CHECK(VertexExportSemantic(rio_primitive_vs, 1) ==
+         PixelInputSemantic(rio_primitive_ps, 1));
+
+   /* RIO-Tests 05: camera matrix as four loose vec4 rows, applied with dot(). */
+   GX2VertexShader *rio_mvp_vs = CompileVertexShader(
+      "#version 330 core\n"
+      "\n"
+      "uniform vec4 mvp[4];\n"
+      "\n"
+      "layout(location = 0) in vec3 v_inPos;\n"
+      "layout(location = 1) in vec2 v_inTexCoord;\n"
+      "\n"
+      "out vec2 TexCoord;\n"
+      "\n"
+      "void main()\n"
+      "{\n"
+      "    TexCoord = v_inTexCoord;\n"
+      "\n"
+      "    vec4 pos = vec4(v_inPos, 1.0f);\n"
+      "    gl_Position = vec4(dot(mvp[0], pos), dot(mvp[1], pos), dot(mvp[2], pos), dot(mvp[3], pos));\n"
+      "}\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   if (!rio_mvp_vs) {
+      fprintf(stderr, "RIO-Tests 05 test_shader.vert failed: %s\n", diagnostics);
+      return 1;
+   }
+   CHECK(rio_mvp_vs->mode == GX2_SHADER_MODE_UNIFORM_REGISTER);
+   CHECK(rio_mvp_vs->uniformBlockCount == 0);
+   CHECK(FindAttribute(rio_mvp_vs->attribVars,
+                       rio_mvp_vs->attribVarCount, "v_inPos") == 0);
+   CHECK(FindAttribute(rio_mvp_vs->attribVars,
+                       rio_mvp_vs->attribVarCount, "v_inTexCoord") == 1);
+   const GX2UniformVar *rio_mvp = FindUniform(
+      rio_mvp_vs->uniformVars, rio_mvp_vs->uniformVarCount, "mvp");
+   CHECK(rio_mvp && rio_mvp->count == 4 && rio_mvp->offset == 0);
+   CHECK(rio_mvp->block == -1);
+
+   /* Sampler-only uniforms touch neither file, so uniform-block mode stays free. */
+   GX2PixelShader *rio_mix_ps = CompilePixelShader(
+      "#version 330 core\n"
+      "\n"
+      "uniform sampler2D texture0;\n"
+      "uniform sampler2D texture1;\n"
+      "\n"
+      "in vec2 TexCoord;\n"
+      "\n"
+      "out vec4 o_FragColor;\n"
+      "\n"
+      "void main()\n"
+      "{\n"
+      "    o_FragColor = mix(texture(texture0, TexCoord), texture(texture1, TexCoord), 0.2f);\n"
+      "}\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   if (!rio_mix_ps) {
+      fprintf(stderr, "RIO-Tests 05 test_shader.frag failed: %s\n", diagnostics);
+      return 1;
+   }
+   CHECK(rio_mix_ps->mode == GX2_SHADER_MODE_UNIFORM_BLOCK);
+   CHECK(rio_mix_ps->uniformVarCount == 0);
+   CHECK(FindSampler(rio_mix_ps->samplerVars,
+                     rio_mix_ps->samplerVarCount, "texture0") == 0);
+   CHECK(FindSampler(rio_mix_ps->samplerVars,
+                     rio_mix_ps->samplerVarCount, "texture1") == 1);
+   CHECK(rio_mix_ps->regs.num_spi_ps_input_cntl == 1);
+   CHECK(VertexExportSemantic(rio_mvp_vs, 0) == PixelInputSemantic(rio_mix_ps, 0));
+
+   /* setUniform writes a vec4 at a time, so each vec3 takes a full slot. */
+   GX2PixelShader *rio_light_ps = CompilePixelShader(
+      "#version 330 core\n"
+      "\n"
+      "uniform vec3 lightColor;\n"
+      "uniform vec3 lightPos;\n"
+      "uniform vec3 viewPos;\n"
+      "\n"
+      "uniform sampler2D texture0;\n"
+      "uniform sampler2D texture1;\n"
+      "\n"
+      "in vec3 FragPos;\n"
+      "in vec2 TexCoord;\n"
+      "in vec3 Normal;\n"
+      "\n"
+      "out vec4 o_FragColor;\n"
+      "\n"
+      "void main()\n"
+      "{\n"
+      "    vec4 texColor = mix(texture(texture0, TexCoord), texture(texture1, TexCoord), 0.2f);\n"
+      "    vec3 ambient = 0.4f * lightColor;\n"
+      "    vec3 lightDir = normalize(lightPos - FragPos);\n"
+      "    vec3 diffuse = max(dot(Normal, lightDir), 0.0f) * lightColor;\n"
+      "    vec3 viewDir = normalize(viewPos - FragPos);\n"
+      "    vec3 reflectDir = reflect(-lightDir, Normal);\n"
+      "    vec3 specular = 0.4f * pow(max(dot(viewDir, reflectDir), 0.0f), 32) * lightColor;\n"
+      "    o_FragColor = vec4((ambient + diffuse + specular) * texColor.rgb, texColor.a);\n"
+      "}\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   if (!rio_light_ps) {
+      fprintf(stderr, "RIO-Tests 07 test_shader.frag failed: %s\n", diagnostics);
+      return 1;
+   }
+   CHECK(rio_light_ps->mode == GX2_SHADER_MODE_UNIFORM_REGISTER);
+   const GX2UniformVar *rio_light_color = FindUniform(
+      rio_light_ps->uniformVars, rio_light_ps->uniformVarCount, "lightColor");
+   const GX2UniformVar *rio_light_pos = FindUniform(
+      rio_light_ps->uniformVars, rio_light_ps->uniformVarCount, "lightPos");
+   const GX2UniformVar *rio_view_pos = FindUniform(
+      rio_light_ps->uniformVars, rio_light_ps->uniformVarCount, "viewPos");
+   CHECK(rio_light_color && rio_light_color->offset == 0);
+   CHECK(rio_light_color->type == GX2_SHADER_VAR_TYPE_FLOAT3);
+   CHECK(rio_light_pos && rio_light_pos->offset == 16);
+   CHECK(rio_view_pos && rio_view_pos->offset == 32);
+   CHECK(FindSampler(rio_light_ps->samplerVars,
+                     rio_light_ps->samplerVarCount, "texture0") == 0);
+   CHECK(FindSampler(rio_light_ps->samplerVars,
+                     rio_light_ps->samplerVarCount, "texture1") == 1);
+   CHECK(rio_light_ps->regs.num_spi_ps_input_cntl == 3);
+
+   /* Same three varyings in opposite orders, one surviving each side, so the name is
+    * all the two compiles have left in common.
+    */
+   GX2VertexShader *rio_named_varying_vs = CompileVertexShader(
+      "#version 330 core\n"
+      "layout(location = 0) in vec3 v_inPos;\n"
+      "out vec3 FragPos;\n"
+      "out vec2 TexCoord;\n"
+      "out vec3 Normal;\n"
+      "void main() { Normal = v_inPos.zyx; gl_Position = vec4(v_inPos, 1.0); }\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   GX2PixelShader *rio_named_varying_ps = CompilePixelShader(
+      "#version 330 core\n"
+      "in vec3 Normal;\n"
+      "in vec2 TexCoord;\n"
+      "in vec3 FragPos;\n"
+      "out vec4 o_FragColor;\n"
+      "void main() { o_FragColor = vec4(Normal, 1.0); }\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   CHECK(rio_named_varying_vs && rio_named_varying_ps);
+   CHECK(rio_named_varying_vs->regs.num_spi_vs_out_id == 1);
+   CHECK(rio_named_varying_ps->regs.num_spi_ps_input_cntl == 1);
+   CHECK(VertexExportSemantic(rio_named_varying_vs, 0) ==
+         PixelInputSemantic(rio_named_varying_ps, 0));
+
+   /* RIO declares its blocks without a binding, which we do not accept yet. Locked in
+    * so the day it starts compiling is not a silent change.
+    */
+   GX2VertexShader *rio_implicit_block_vs = CompileVertexShader(
+      "#version 330 core\n"
+      "\n"
+      "layout(std140)\n"
+      "uniform cViewBlock\n"
+      "{\n"
+      "    vec3 viewPos;\n"
+      "    vec4 viewProj[4];\n"
+      "};\n"
+      "\n"
+      "layout(location = 0) in vec3 v_inPos;\n"
+      "\n"
+      "void main()\n"
+      "{\n"
+      "    vec4 wpos = vec4(v_inPos + viewPos, 1.0);\n"
+      "    gl_Position = vec4(dot(viewProj[0], wpos), dot(viewProj[1], wpos),\n"
+      "                       dot(viewProj[2], wpos), dot(viewProj[3], wpos));\n"
+      "}\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   CHECK(!rio_implicit_block_vs);
+   CHECK(strstr(diagnostics, "explicit UBO bindings"));
+
+   /* Adding the binding is not enough: #version 330 core has no binding qualifier
+    * without ARB_shading_language_420pack.
+    */
+   GX2VertexShader *rio_unqualified_binding_vs = CompileVertexShader(
+      "#version 330 core\n"
+      "layout(binding = 0, std140) uniform cViewBlock { vec4 viewProj[4]; };\n"
+      "void main() { gl_Position = viewProj[0]; }\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   CHECK(!rio_unqualified_binding_vs);
+   CHECK(strstr(diagnostics, "unrecognized layout identifier"));
+
+   /* With the extension, the same block compiles and lands in the bank it names. */
+   GX2VertexShader *rio_bound_block_vs = CompileVertexShader(
+      "#version 330 core\n"
+      "#extension GL_ARB_shading_language_420pack : require\n"
+      "\n"
+      "layout(binding = 0, std140)\n"
+      "uniform cViewBlock\n"
+      "{\n"
+      "    vec3 viewPos;\n"
+      "    vec4 viewProj[4];\n"
+      "};\n"
+      "\n"
+      "layout(location = 0) in vec3 v_inPos;\n"
+      "\n"
+      "void main()\n"
+      "{\n"
+      "    vec4 wpos = vec4(v_inPos + viewPos, 1.0);\n"
+      "    gl_Position = vec4(dot(viewProj[0], wpos), dot(viewProj[1], wpos),\n"
+      "                       dot(viewProj[2], wpos), dot(viewProj[3], wpos));\n"
+      "}\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   if (!rio_bound_block_vs) {
+      fprintf(stderr, "RIO-Tests 08 with an explicit binding failed: %s\n", diagnostics);
+      return 1;
+   }
+   CHECK(rio_bound_block_vs->mode == GX2_SHADER_MODE_UNIFORM_BLOCK);
+   CHECK(FindUniformBlock(rio_bound_block_vs->uniformBlocks,
+                          rio_bound_block_vs->uniformBlockCount,
+                          "cViewBlock") == 0);
+   /* std140 rounds the leading vec3 up to a full vec4 before the array starts. */
+   const GX2UniformVar *rio_view_proj = FindUniform(
+      rio_bound_block_vs->uniformVars, rio_bound_block_vs->uniformVarCount, "viewProj");
+   CHECK(rio_view_proj && rio_view_proj->offset == 16);
+   CHECK(rio_view_proj->count == 4 && rio_view_proj->block == 0);
+
    GX2PixelShader *invalid = CompilePixelShader(
       "#version 450\nthis is invalid;",
       diagnostics,
@@ -627,10 +959,22 @@ void main() {
    CHECK(!invalid);
    CHECK(diagnostics[0]);
 
+   FreeVertexShader(rio_primitive_vs);
+   FreeVertexShader(rio_mvp_vs);
+   FreeVertexShader(rio_named_varying_vs);
+   FreeVertexShader(rio_bound_block_vs);
+   FreePixelShader(rio_primitive_ps);
+   FreePixelShader(rio_mix_ps);
+   FreePixelShader(rio_light_ps);
+   FreePixelShader(rio_named_varying_ps);
    FreeVertexShader(vertex);
    FreeVertexShader(vertex_id);
    FreeVertexShader(loose_vertex);
    FreeVertexShader(last_uniform_block);
+   FreeVertexShader(indexed_loose_with_block);
+   FreeVertexShader(loose_pair_with_block);
+   FreeVertexShader(mixed_uniforms);
+   FreeVertexShader(oversized_mixed);
    FreePixelShader(pixel);
    FreePixelShader(environment_pass);
    DestroyGLSLCompiler();
