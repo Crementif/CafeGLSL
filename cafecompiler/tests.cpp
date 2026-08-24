@@ -18,13 +18,21 @@ constexpr uint32_t kCfVtxTc = 3;
 constexpr uint32_t kCfAlu = 8;
 constexpr uint32_t kVFetch = 0;
 
-static int FindUniformBlock(const GX2UniformBlock *blocks, uint32_t count, const char *name)
+static int FindUniformBlockIndex(const GX2UniformBlock *blocks,
+                                 uint32_t count,
+                                 const char *name)
 {
    for (uint32_t i = 0; i < count; ++i) {
       if (!strcmp(blocks[i].name, name))
-         return static_cast<int>(blocks[i].offset);
+         return static_cast<int>(i);
    }
    return -1;
+}
+
+static int FindUniformBlock(const GX2UniformBlock *blocks, uint32_t count, const char *name)
+{
+   const int index = FindUniformBlockIndex(blocks, count, name);
+   return index < 0 ? -1 : static_cast<int>(blocks[index].offset);
 }
 
 static int FindSampler(const GX2SamplerVar *samplers, uint32_t count, const char *name)
@@ -143,6 +151,67 @@ static bool HasAluConstSource(const void *program,
    return false;
 }
 
+/* Latte ALU source selectors: 0-127 GPRs, 128-191 the two constant-cache banks,
+ * 256-511 the ALU constant file.
+ */
+static bool HasAluSourceInRange(const void *program,
+                                uint32_t size,
+                                uint32_t first,
+                                uint32_t last)
+{
+   const auto *words = static_cast<const uint32_t *>(program);
+   const uint32_t word_count = size / sizeof(uint32_t);
+   for (uint32_t i = 0; i + 1 < word_count; i += 2) {
+      const uint32_t cf_word0 = words[i];
+      const uint32_t cf_word1 = words[i + 1];
+      const bool is_alu = ((cf_word1 >> 26) & 0xf) >= kCfAlu;
+      if (is_alu) {
+         const uint32_t count = ((cf_word1 >> 18) & 0x7f) + 1;
+         const uint32_t clause_start = (cf_word0 & 0x3fffff) * 2;
+         for (uint32_t instruction = 0; instruction < count; ++instruction) {
+            const uint32_t alu_word = clause_start + instruction * 2;
+            if (alu_word + 1 >= word_count)
+               break;
+            const uint32_t word0 = words[alu_word];
+            const uint32_t selectors[2] = {
+               word0 & 0x1ff,
+               (word0 >> 13) & 0x1ff,
+            };
+            for (unsigned source = 0; source < 2; ++source) {
+               if (selectors[source] >= first && selectors[source] <= last)
+                  return true;
+            }
+         }
+      }
+      if (!is_alu && (cf_word1 & (1u << 21)))
+         break;
+   }
+   return false;
+}
+
+static bool ReadsAluConstFile(const void *program, uint32_t size)
+{
+   return HasAluSourceInRange(program, size, 256, 511);
+}
+
+static bool ReadsKcache(const void *program, uint32_t size)
+{
+   return HasAluSourceInRange(program, size, 128, 191);
+}
+
+/* The Latte semantic a vertex export or a pixel input carries. Both tables hold one
+ * byte per parameter; the vertex side packs four of them into each register.
+ */
+static unsigned VertexExportSemantic(const GX2VertexShader *shader, unsigned param)
+{
+   return (shader->regs.spi_vs_out_id[param / 4] >> ((param % 4) * 8)) & 0xff;
+}
+
+static unsigned PixelInputSemantic(const GX2PixelShader *shader, unsigned input)
+{
+   return shader->regs.spi_ps_input_cntls[input] & 0xff;
+}
+
 static bool HasKcacheBank(const void *program, uint32_t size, uint32_t bank)
 {
    const auto *words = static_cast<const uint32_t *>(program);
@@ -236,10 +305,8 @@ void main() {
    CHECK(vertex->mode == GX2_SHADER_MODE_UNIFORM_BLOCK);
    CHECK(vertex->attribVarCount == 2);
    CHECK(vertex->regs.pa_cl_vs_out_cntl == 0);
-   /* An attribute has to land in R(location + 1), because that is where the fetch
-    * shader GX2InitFetchShaderEx builds from the GX2AttribStream table puts it. The
-    * semantic table is the identity map that gets it there, with a hole for every
-    * location the shader does not declare.
+   /* Identity map, with a hole for every location the shader does not declare, so
+    * that an attribute at location N arrives in R(N + 1).
     */
    CHECK(vertex->regs.num_sq_vtx_semantic == 6);
    CHECK(vertex->regs.sq_vtx_semantic[0] == 0);
@@ -260,14 +327,20 @@ void main() {
       return 1;
    }
    CHECK(pixel->program && pixel->size);
-   CHECK(pixel->mode == GX2_SHADER_MODE_UNIFORM_REGISTER);
+   CHECK(pixel->mode == GX2_SHADER_MODE_UNIFORM_BLOCK);
+   CHECK(strstr(diagnostics, "warning:") &&
+         strstr(diagnostics, "GX2SetPixelUniformBlock"));
    CHECK((pixel->regs.spi_ps_input_cntls[0] & 0xff) == 0x8a);
    CHECK(FindUniformBlock(pixel->uniformBlocks,
                           pixel->uniformBlockCount,
                           "PixelData") == 9);
-   CHECK(pixel->uniformBlockCount == 1);
-   CHECK(HasAluConstSource(pixel->program, pixel->size, 257, false));
+   CHECK(FindUniformBlock(pixel->uniformBlocks,
+                          pixel->uniformBlockCount,
+                          "__cafe_loose_uniforms") == 0);
+   CHECK(pixel->uniformBlockCount == 2);
+   CHECK(!HasAluConstSource(pixel->program, pixel->size, 257, false));
    CHECK(HasKcacheBank(pixel->program, pixel->size, 9));
+   CHECK(HasKcacheBank(pixel->program, pixel->size, 0));
    CHECK(FindSampler(pixel->samplerVars,
                      pixel->samplerVarCount,
                      "sourceTexture") == 2);
@@ -282,14 +355,16 @@ void main() {
       pixel->uniformVars, pixel->uniformVarCount, "looseData.color");
    const GX2UniformVar *loose_factor = FindUniform(
       pixel->uniformVars, pixel->uniformVarCount, "looseData.factor");
+   const int pixel_loose_block = FindUniformBlockIndex(
+      pixel->uniformBlocks, pixel->uniformBlockCount, "__cafe_loose_uniforms");
    CHECK(tint && tint->offset == 16);
    CHECK(tint->block == 0);
    CHECK(exposure && exposure->offset == 16);
-   CHECK(exposure->block == -1);
+   CHECK(exposure->block == pixel_loose_block);
    CHECK(loose_color && loose_factor);
    CHECK(loose_factor->offset > loose_color->offset);
-   CHECK(loose_color->block == -1);
-   CHECK(loose_factor->block == -1);
+   CHECK(loose_color->block == pixel_loose_block);
+   CHECK(loose_factor->block == pixel_loose_block);
 
    GX2VertexShader *loose_vertex = CompileVertexShader(
       "#version 450\n"
@@ -370,6 +445,133 @@ void main() {
       GLSL_COMPILER_FLAG_NONE);
    CHECK(!double_attribute);
    CHECK(strstr(diagnostics, "64-bit"));
+
+   /* A shader must not source constants from both the ALU constant file and a kcache
+    * bank. Cemu's decompiler picks one uniform mode per shader and only its REMAPPED
+    * mode translates both kinds; a relative constant-file read forces FULL_CFILE,
+    * where every constant source is emitted as a uniform register and the kcache reads
+    * silently come out wrong. So a shader that mixes loose uniforms with a uniform
+    * block has to put the loose ones in a block too.
+    */
+   GX2VertexShader *indexed_loose_with_block = CompileVertexShader(
+      "#version 450\n"
+      "uniform vec4 positions[4];\n"
+      "layout(binding = 3, std140) uniform Data { vec4 scale; };\n"
+      "void main() { gl_Position = positions[gl_VertexID & 3] * scale; }\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   CHECK(indexed_loose_with_block);
+   CHECK(!(ReadsAluConstFile(indexed_loose_with_block->program,
+                             indexed_loose_with_block->size) &&
+           ReadsKcache(indexed_loose_with_block->program,
+                       indexed_loose_with_block->size)));
+
+   GX2VertexShader *loose_pair_with_block = CompileVertexShader(
+      "#version 450\n"
+      "uniform vec4 tint;\n"
+      "uniform vec4 positions[4];\n"
+      "layout(binding = 3, std140) uniform Data { vec4 scale; };\n"
+      "void main() { gl_Position = positions[gl_VertexID & 3] * scale * tint; }\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   CHECK(loose_pair_with_block);
+   CHECK(!(ReadsAluConstFile(loose_pair_with_block->program,
+                             loose_pair_with_block->size) &&
+           ReadsKcache(loose_pair_with_block->program,
+                       loose_pair_with_block->size)));
+
+   GX2VertexShader *mixed_uniforms = CompileVertexShader(
+      "#version 450\n"
+      "layout(binding = 15, std140) uniform LastBlock { vec4 position; };\n"
+      "uniform vec4 offset;\n"
+      "void main() { gl_Position = position + offset; }\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   CHECK(mixed_uniforms);
+   CHECK(mixed_uniforms->mode == GX2_SHADER_MODE_UNIFORM_BLOCK);
+   CHECK(mixed_uniforms->uniformBlockCount == 2);
+   CHECK(FindUniformBlock(mixed_uniforms->uniformBlocks,
+                          mixed_uniforms->uniformBlockCount,
+                          "__cafe_loose_uniforms") == 0);
+   CHECK(FindUniformBlock(mixed_uniforms->uniformBlocks,
+                          mixed_uniforms->uniformBlockCount,
+                          "LastBlock") == 15);
+   CHECK(HasKcacheBank(mixed_uniforms->program, mixed_uniforms->size, 0));
+   CHECK(HasKcacheBank(mixed_uniforms->program, mixed_uniforms->size, 15));
+   CHECK(!ReadsAluConstFile(mixed_uniforms->program, mixed_uniforms->size));
+   CHECK(mixed_uniforms->uniformBlocks[FindUniformBlockIndex(
+            mixed_uniforms->uniformBlocks,
+            mixed_uniforms->uniformBlockCount,
+            "__cafe_loose_uniforms")].size == 16);
+   CHECK(strstr(diagnostics, "warning:"));
+   CHECK(strstr(diagnostics, "__cafe_loose_uniforms"));
+   CHECK(strstr(diagnostics, "GX2SetVertexUniformBlock"));
+
+   CHECK(!CompileVertexShader(
+      "#version 450\n"
+      "layout(binding = 0, std140) uniform Data { vec4 scale; };\n"
+      "uniform vec4 offset;\n"
+      "void main() { gl_Position = scale + offset; }\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE));
+   CHECK(strstr(diagnostics, "binding 0 is reserved"));
+
+   /* Only mixed shaders lose binding 0. */
+   GX2VertexShader *block_zero_alone = CompileVertexShader(
+      "#version 450\n"
+      "layout(binding = 0, std140) uniform Data { vec4 scale; };\n"
+      "void main() { gl_Position = scale; }\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   CHECK(block_zero_alone);
+   CHECK(FindUniformBlock(block_zero_alone->uniformBlocks,
+                          block_zero_alone->uniformBlockCount,
+                          "Data") == 0);
+
+   /* Deliberately an error rather than a silent move into a block. */
+   CHECK(!CompileVertexShader(
+      "#version 450\n"
+      "uniform vec4 positions[300];\n"
+      "void main() { gl_Position = positions[gl_VertexID & 255]; }\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE));
+   CHECK(strstr(diagnostics, "ALU constant file"));
+
+   /* The same array is fine once a block has forced everything into the kcache. */
+   GX2VertexShader *oversized_mixed = CompileVertexShader(
+      "#version 450\n"
+      "layout(binding = 7, std140) uniform Data { vec4 scale; };\n"
+      "uniform vec4 positions[300];\n"
+      "void main() { gl_Position = positions[gl_VertexID & 255] * scale; }\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   CHECK(oversized_mixed);
+   CHECK(oversized_mixed->mode == GX2_SHADER_MODE_UNIFORM_BLOCK);
+   CHECK(FindUniformBlock(oversized_mixed->uniformBlocks,
+                          oversized_mixed->uniformBlockCount,
+                          "__cafe_loose_uniforms") == 0);
+   CHECK(oversized_mixed->uniformBlocks[FindUniformBlockIndex(
+            oversized_mixed->uniformBlocks,
+            oversized_mixed->uniformBlockCount,
+            "__cafe_loose_uniforms")].size == 300 * 16);
+
+   GX2VertexShader *quiet_loose = CompileVertexShader(
+      "#version 450\n"
+      "uniform vec4 offset;\n"
+      "void main() { gl_Position = offset; }\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   CHECK(quiet_loose);
+   CHECK(quiet_loose->mode == GX2_SHADER_MODE_UNIFORM_REGISTER);
+   CHECK(!diagnostics[0]);
 
    GX2VertexShader *vertex_id = CompileVertexShader(
       "#version 450\n"

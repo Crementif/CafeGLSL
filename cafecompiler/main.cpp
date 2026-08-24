@@ -92,6 +92,9 @@ int main(int argc, char **argv)
          pixel_shaders.push_back(shader);
          output.pixelShaders.push_back(shader);
       }
+
+      if (diagnostics[0])
+         std::cerr << path << ": " << diagnostics << '\n';
    }
 
    if (!result && !output_path.empty() && !WriteGFD(output, output_path)) {
