@@ -582,32 +582,48 @@ static bool BuildVertexSemanticMap(nir_shader *nir,
                             std::string &diagnostics)
 {
    semantics.fill(0xff);
-   std::vector<nir_variable *> inputs;
-   nir_foreach_variable_with_modes(variable, nir, nir_var_shader_in)
-      inputs.push_back(variable);
-   std::sort(inputs.begin(), inputs.end(), [](const nir_variable *left,
-                                              const nir_variable *right) {
-      if (left->data.location != right->data.location)
-         return left->data.location < right->data.location;
-      return left->data.location_frac < right->data.location_frac;
-   });
 
-   unsigned driver_location = 0;
-   for (nir_variable *variable : inputs) {
-      const int location = variable->data.location - VERT_ATTRIB_GENERIC0;
-      const unsigned slots = glsl_count_attribute_slots(variable->type, false);
-      if (location < 0 ||
-          location + slots > semantics.size() ||
-          driver_location + slots > semantics.size()) {
-         diagnostics = "Vertex attribute location exceeds Latte's 32 slots";
-         return false;
+   /* GX2InitFetchShaderEx delivers an attribute to R(location + 1), and the SFN
+    * backend puts input base N in R(N + 1), so the bases have to equal the declared
+    * locations. gl_nir_lower_optimize_varyings() packs them into a prefix sum over the
+    * locations that survived DCE instead, so undo that. The semantic table stays an
+    * identity map with a hole for every location the shader does not read, which drops
+    * unused streams rather than landing them on a live register.
+    */
+   unsigned num_inputs = 0;
+   nir_foreach_block(block, nir_shader_get_entrypoint(nir)) {
+      nir_foreach_instr(instr, block) {
+         nir_variable_mode mode;
+         nir_intrinsic_instr *load =
+            nir_get_io_intrinsic(instr, nir_var_shader_in, &mode);
+         if (!load)
+            continue;
+
+         const nir_io_semantics io = nir_intrinsic_io_semantics(load);
+         const int location = static_cast<int>(io.location) - VERT_ATTRIB_GENERIC0;
+         if (location < 0 ||
+             static_cast<unsigned>(location) + io.num_slots > semantics.size()) {
+            diagnostics = "Vertex attribute location exceeds Latte's 32 slots";
+            return false;
+         }
+         if (io.high_dvec2) {
+            diagnostics = "64-bit vertex attributes cannot be represented by GX2";
+            return false;
+         }
+
+         nir_intrinsic_set_base(load, location);
+         for (unsigned i = 0; i < io.num_slots; ++i)
+            semantics[location + i] = location + i;
+         num_inputs = MAX2(num_inputs, static_cast<unsigned>(location) + io.num_slots);
       }
-      variable->data.driver_location = driver_location;
-      for (unsigned i = 0; i < slots; ++i)
-         semantics[driver_location + i] = location + i;
-      driver_location += slots;
    }
-   nir->num_inputs = driver_location;
+
+   /* Unused once the loads are lowered, but a re-lowering would read them. */
+   nir_foreach_variable_with_modes(variable, nir, nir_var_shader_in)
+      variable->data.driver_location =
+         MAX2(0, variable->data.location - VERT_ATTRIB_GENERIC0);
+
+   nir->num_inputs = num_inputs;
    return true;
 }
 
