@@ -36,6 +36,15 @@ static int FindSampler(const GX2SamplerVar *samplers, uint32_t count, const char
    return -1;
 }
 
+static int FindAttribute(const GX2AttribVar *attributes, uint32_t count, const char *name)
+{
+   for (uint32_t i = 0; i < count; ++i) {
+      if (!strcmp(attributes[i].name, name))
+         return static_cast<int>(attributes[i].location);
+   }
+   return -1;
+}
+
 static const GX2UniformVar *FindUniform(const GX2UniformVar *uniforms,
                                        uint32_t count,
                                        const char *name)
@@ -227,9 +236,15 @@ void main() {
    CHECK(vertex->mode == GX2_SHADER_MODE_UNIFORM_BLOCK);
    CHECK(vertex->attribVarCount == 2);
    CHECK(vertex->regs.pa_cl_vs_out_cntl == 0);
-   CHECK(vertex->regs.num_sq_vtx_semantic == 2);
+   /* An attribute has to land in R(location + 1), because that is where the fetch
+    * shader GX2InitFetchShaderEx builds from the GX2AttribStream table puts it. The
+    * semantic table is the identity map that gets it there, with a hole for every
+    * location the shader does not declare.
+    */
+   CHECK(vertex->regs.num_sq_vtx_semantic == 6);
    CHECK(vertex->regs.sq_vtx_semantic[0] == 0);
-   CHECK(vertex->regs.sq_vtx_semantic[1] == 5);
+   CHECK(vertex->regs.sq_vtx_semantic[1] == 0xff);
+   CHECK(vertex->regs.sq_vtx_semantic[5] == 5);
    CHECK((vertex->regs.spi_vs_out_id[0] & 0xff) == 0x8a);
    CHECK(FindUniformBlock(vertex->uniformBlocks,
                           vertex->uniformBlockCount,
@@ -318,6 +333,43 @@ void main() {
       GLSL_COMPILER_FLAG_NONE);
    CHECK(!sampler_aggregate);
    CHECK(strstr(diagnostics, "structures"));
+
+   /* An attribute that linking drops must not pull the ones behind it down a slot:
+    * the host still binds tail by its declared location, so it has to stay in R3.
+    */
+   GX2VertexShader *dropped_attribute = CompileVertexShader(
+      "#version 450\n"
+      "layout(location = 0) in vec4 head;\n"
+      "layout(location = 1) in vec4 unused;\n"
+      "layout(location = 2) in vec4 tail;\n"
+      "layout(location = 0) out vec4 color;\n"
+      "void main() { gl_Position = head; color = tail; }\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   CHECK(dropped_attribute);
+   CHECK(dropped_attribute->attribVarCount == 2);
+   CHECK(FindAttribute(dropped_attribute->attribVars,
+                       dropped_attribute->attribVarCount,
+                       "tail") == 2);
+   CHECK(dropped_attribute->regs.num_sq_vtx_semantic == 3);
+   CHECK(dropped_attribute->regs.sq_vtx_semantic[0] == 0);
+   CHECK(dropped_attribute->regs.sq_vtx_semantic[1] == 0xff);
+   CHECK(dropped_attribute->regs.sq_vtx_semantic[2] == 2);
+   /* NUM_GPRS: R0 plus R1-R3 for locations 0-2. */
+   CHECK((dropped_attribute->regs.sq_pgm_resources_vs & 0xff) >= 4);
+
+   GX2VertexShader *double_attribute = CompileVertexShader(
+      "#version 450\n"
+      "layout(location = 0) in vec4 head;\n"
+      "layout(location = 2) in dvec4 wide;\n"
+      "layout(location = 0) out vec4 color;\n"
+      "void main() { gl_Position = head; color = vec4(wide); }\n",
+      diagnostics,
+      sizeof(diagnostics),
+      GLSL_COMPILER_FLAG_NONE);
+   CHECK(!double_attribute);
+   CHECK(strstr(diagnostics, "64-bit"));
 
    GX2VertexShader *vertex_id = CompileVertexShader(
       "#version 450\n"
