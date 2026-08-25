@@ -48,7 +48,7 @@ jobs:
           pip3 install --no-cache-dir 'meson>=1.4' \
             || pip3 install --no-cache-dir --break-system-packages 'meson>=1.4'
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Configure
         env:
@@ -64,7 +64,7 @@ jobs:
       - name: Package
         run: ./cafecompiler/ci/package.sh host build stage
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cafeglsl-linux-x86_64
           path: stage/
@@ -87,7 +87,7 @@ jobs:
           pip3 install --no-cache-dir 'meson>=1.4' \
             || pip3 install --no-cache-dir --break-system-packages 'meson>=1.4'
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Configure
         # No mingw zlib/expat to find, so meson builds both from subprojects/.
@@ -112,7 +112,7 @@ jobs:
       - name: Package
         run: ./cafecompiler/ci/package.sh host build stage
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cafeglsl-windows-x86_64
           path: stage/
@@ -131,7 +131,7 @@ jobs:
           - runner: macos-15-intel
             arch: x86_64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install dependencies
         # Apple's bison is 2.3, too old for the GLSL parser.
@@ -158,7 +158,7 @@ jobs:
       - name: Package
         run: ./cafecompiler/ci/package.sh host build stage
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cafeglsl-macos-${{ matrix.arch }}
           path: stage/
@@ -182,7 +182,7 @@ jobs:
           pip3 install --no-cache-dir 'meson>=1.4' \
             || pip3 install --no-cache-dir --break-system-packages 'meson>=1.4'
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Put the toolchain on PATH
         # meson-toolchain.sh emits bare tool names, so ninja needs them resolvable.
@@ -206,7 +206,7 @@ jobs:
       - name: Package
         run: ./cafecompiler/ci/package.sh wiiu build-cafe stage
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cafeglsl-wiiu-ppc
           path: stage/
