@@ -18,7 +18,7 @@
 #include "git_sha1.h"
 
 #include <inttypes.h>
-#if !defined(__WUT__)
+#if !defined(__WUT__) && !defined(_WIN32)
 #include <sys/utsname.h>
 #endif
 #include <stdlib.h>
@@ -974,7 +974,7 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 			     struct radeon_winsys *ws)
 {
 	char family_name[32] = {}, kernel_version[128] = {};
-#if !defined(__WUT__)
+#if !defined(__WUT__) && !defined(_WIN32)
 	struct utsname uname_data;
 #endif
 	const char *chip_name;
@@ -984,7 +984,7 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 
 	chip_name = r600_get_family_name(rscreen);
 
-#if !defined(__WUT__)
+#if !defined(__WUT__) && !defined(_WIN32)
 	if (uname(&uname_data) == 0)
 		snprintf(kernel_version, sizeof(kernel_version),
 			 " / %s", uname_data.release);

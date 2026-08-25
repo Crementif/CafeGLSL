@@ -475,7 +475,9 @@ static bool r600_texture_get_param(struct pipe_screen *screen,
 		if (!screen->resource_get_handle(screen, context, resource, &whandle, handle_usage))
 			return false;
 
-		*value = whandle.handle;
+		/* winsys_handle.handle is a HANDLE on Windows and an unsigned
+		 * everywhere else, so go through uintptr_t to widen both. */
+		*value = (uintptr_t)whandle.handle;
 		return true;
 
 	case PIPE_RESOURCE_PARAM_DISJOINT_PLANES:
