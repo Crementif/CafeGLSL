@@ -1,0 +1,66 @@
+name: Wii U library container
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: wiiu-container-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}-wiiu
+  DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+
+jobs:
+  build:
+    name: Build PowerPC artifact image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=pr
+            type=raw,value={{date 'YYYYMMDD'}}-{{sha}},enable=${{ github.event_name == 'push' }}
+            type=raw,value={{date 'YYYYMMDD'}},enable=${{ github.event_name == 'push' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' }}
+            type=semver,pattern={{version}},value=${{ github.event.release.tag_name }},enable=${{ github.event_name == 'release' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ github.event.release.tag_name }},enable=${{ github.event_name == 'release' }}
+            type=semver,pattern={{major}},value=${{ github.event.release.tag_name }},enable=${{ github.event_name == 'release' }}
+            type=sha,prefix=sha-
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.wiiu
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha,scope=cafeglsl-wiiu
+          cache-to: type=gha,mode=max,scope=cafeglsl-wiiu
+          provenance: mode=max
+          sbom: true

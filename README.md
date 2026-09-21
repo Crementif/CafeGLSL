@@ -54,6 +54,31 @@ The first example shows the recommended way to compile shaders, since it guarant
 With the default `auto` mode, if one needs uniform blocks, the other uses block mode too.
 The compiler warns if this moves loose uniforms out of registers, as you'll need to upload them at binding 0 using `GX2Set*UniformBlock` instead of `GX2Set*UniformReg`.
 
+#### Docker
+
+The compiler is also available as a Linux container from the GitHub Container Registry.
+The image uses `glslcompiler` as its entry point and `/work` as its working directory,
+so mount the directory containing your shaders there:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" \
+  ghcr.io/exzap/cafeglsl:latest \
+  -vs shader.vert -ps shader.frag -o shaders.gsh
+```
+
+On PowerShell, omit `--user` and use `${PWD}` for the volume path:
+
+```powershell
+docker run --rm -v "${PWD}:/work" `
+  ghcr.io/exzap/cafeglsl:latest `
+  -vs shader.vert -ps shader.frag -o shaders.gsh
+```
+
+Published releases create versioned images (for example, `:1.0.0`) and stable releases
+also update `:latest`. The current `main` branch is published as `:edge`.
+To build the image locally instead, run `docker build -t cafeglsl .` and replace
+the registry image name above with `cafeglsl`.
+
 Only one vertex shader and one pixel shader compile as a pair. All other combinations compile separately, as in the second example.
 When combining separately compiled shaders, make sure both use the same uniform mode.
 
@@ -90,6 +115,18 @@ The Wii U release is laid out as a devkitPro portlib, so it can be extracted str
 ```bash
 tar -xf <this-archive> -C /opt/devkitpro/portlibs/wiiu --strip-components=1
 ```
+
+If your application is built in Docker, the PowerPC library is also published as
+a libmocha-style artifact image. Copy its `/artifacts` tree into `$DEVKITPRO`:
+
+```dockerfile
+COPY --from=ghcr.io/exzap/cafeglsl-wiiu:latest /artifacts $DEVKITPRO
+```
+
+This installs the headers, `libcafeglsl.a`, pkg-config file, and CMake package
+under `$DEVKITPRO/portlibs/wiiu`. Pin a version or date-and-commit tag for reproducible
+builds. The artifact image is based on `scratch` and is intended only as a source
+for `COPY --from`; it is not a runnable container.
 
 Then link it with CMake:
 
